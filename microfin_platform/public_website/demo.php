@@ -13,7 +13,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $contact_suffix = trim($_POST['contact_suffix'] ?? '');
     $location = trim($_POST['location'] ?? '');
     $plan_tier = trim($_POST['plan_tier'] ?? '');
-    $plan_tier = $plan_tier === '' ? null : $plan_tier;
     $company_email = trim($_POST['company_email'] ?? '');
     $demo_schedule_date = trim($_POST['demo_schedule_date'] ?? '');
     $uploaded_files = $_FILES['legitimacy_documents'] ?? null;
@@ -33,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     if ($institution_name === '' || $company_email === '' || $plan_tier === '') {
-        $form_error = 'Institution Name and Work Email are required.';
+        $form_error = 'Institution Name, Work Email, and Subscription Plan are required.';
     } elseif ($document_count < 1 || $document_count > 5) {
         $form_error = 'Please upload 1 to 5 proof of legitimacy documents.';
     } elseif (!$is_otp_verified) {
