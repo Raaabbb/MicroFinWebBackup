@@ -167,8 +167,6 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>1,000</strong> Max Clients</li>
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>250</strong> Max Users</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> Cloud-Based Access</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> Core Banking Engine</li>
                     </ul>
                 </div>
                 
@@ -182,8 +180,6 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>2,500</strong> Max Clients</li>
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>750</strong> Max Users</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> Advanced Analytics</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> Custom Branding</li>
                     </ul>
                 </div>
 
@@ -196,8 +192,6 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>5,000</strong> Max Clients</li>
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>2,000</strong> Max Users</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> Automated Notifications</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> Priority Support</li>
                     </ul>
                 </div>
 
@@ -210,8 +204,6 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>10,000</strong> Max Clients</li>
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>5,000</strong> Max Users</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> API & Integrations</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> Dedicated Manager</li>
                     </ul>
                 </div>
 
@@ -224,8 +216,6 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>Unlimited</strong> Clients</li>
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>Unlimited</strong> Users</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> All Enterprise Features</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> White-glove Onboarding</li>
                     </ul>
                 </div>
             </div>
