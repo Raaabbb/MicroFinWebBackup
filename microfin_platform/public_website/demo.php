@@ -140,83 +140,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             --base-dark: #0B0F1A;
             --surface-dark: #121826;
             --surface-light: #1A2235;
+            --surface-soft: #0f1b33;
             --primary: #3B82F6;
-            --primary-light: #60A5FA;
+            --primary-light: #93c5fd;
             --accent: #8B5CF6;
             --accent-hover: #7C3AED;
             --primary-glow: rgba(59, 130, 246, 0.15);
-            --bg-light: #121826;
             --text-dark: #F8FAFC;
             --text-gray: #94A3B8;
             --text-light: #64748B;
-            --shadow-lg: 0 15px 40px rgba(0, 0, 0, 0.6);
+            --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
         }
 
         body {
             font-family: 'Inter', sans-serif;
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             background: var(--base-dark);
-            padding: 40px 20px;
-            position: relative;
+            padding: 86px 20px 40px;
             color: var(--text-dark);
+            position: relative;
         }
 
         body::before {
             content: '';
             position: fixed;
             inset: 0;
-            background: radial-gradient(circle at 20% 45%, rgba(59, 130, 246, 0.12) 0%, transparent 52%),
-                        radial-gradient(circle at 78% 18%, rgba(139, 92, 246, 0.1) 0%, transparent 44%),
-                        radial-gradient(circle at 58% 82%, rgba(59, 130, 246, 0.07) 0%, transparent 44%);
+            background: radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.2) 0%, transparent 46%),
+                        radial-gradient(circle at 86% 6%, rgba(139, 92, 246, 0.14) 0%, transparent 42%),
+                        radial-gradient(circle at 70% 88%, rgba(59, 130, 246, 0.1) 0%, transparent 45%);
             pointer-events: none;
             z-index: 0;
         }
 
         .back-btn {
             position: fixed;
-            top: 24px;
-            left: 24px;
+            top: 22px;
+            left: 22px;
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            color: var(--text-gray);
+            color: #dbeafe;
             text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
-            padding: 10px 18px;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.04);
+            font-size: 0.88rem;
+            font-weight: 600;
+            padding: 9px 16px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.7);
             backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(147, 197, 253, 0.4);
             transition: all 0.25s ease;
-            z-index: 10;
+            z-index: 20;
         }
 
         .back-btn:hover {
-            color: var(--text-dark);
-            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            background: rgba(30, 64, 175, 0.25);
             transform: translateX(-2px);
-            border-color: rgba(96, 165, 250, 0.5);
+            border-color: rgba(147, 197, 253, 0.75);
         }
 
         .back-btn .material-symbols-rounded {
-            font-size: 20px;
+            font-size: 18px;
             transition: transform 0.2s;
         }
 
         .back-btn:hover .material-symbols-rounded {
-            transform: translateX(-3px);
+            transform: translateX(-2px);
         }
 
         .demo-wrapper {
             position: relative;
             z-index: 1;
             width: 100%;
-            max-width: 900px;
-            animation: slideUp 0.5s ease-out;
+            max-width: 1160px;
+            margin: 0 auto;
+            animation: slideUp 0.55s ease-out;
+        }
+
+        .demo-layout {
+            display: grid;
+            grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+            gap: 22px;
+            align-items: stretch;
         }
 
         @keyframes slideUp {
@@ -224,9 +229,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             to { opacity: 1; transform: translateY(0); }
         }
 
+        .demo-intro {
+            background: linear-gradient(170deg, rgba(15, 26, 46, 0.95) 0%, rgba(13, 20, 35, 0.95) 100%);
+            border: 1px solid rgba(147, 197, 253, 0.22);
+            border-radius: 18px;
+            padding: 30px 24px;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
         .page-brand {
-            text-align: center;
-            margin-bottom: 28px;
+            text-align: left;
+            margin-bottom: 6px;
         }
 
         .page-brand .logo {
@@ -234,51 +250,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             align-items: center;
             gap: 8px;
             color: var(--primary-light);
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .page-brand .logo-text {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             font-weight: 800;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.4px;
         }
 
         .page-brand p {
-            color: var(--text-light);
-            font-size: 0.92rem;
+            color: var(--text-gray);
+            font-size: 0.9rem;
+        }
+
+        .intro-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            width: fit-content;
+            border-radius: 999px;
+            border: 1px solid rgba(147, 197, 253, 0.45);
+            background: rgba(30, 64, 175, 0.16);
+            color: #bfdbfe;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            padding: 7px 10px;
+        }
+
+        .intro-title {
+            font-size: 1.95rem;
+            line-height: 1.1;
+            letter-spacing: -0.6px;
+            font-weight: 800;
+            color: #f8fbff;
+        }
+
+        .intro-sub {
+            font-size: 0.95rem;
+            color: #cbd5e1;
+            line-height: 1.6;
+        }
+
+        .intro-list {
+            list-style: none;
+            display: grid;
+            gap: 10px;
+        }
+
+        .intro-list li {
+            display: grid;
+            grid-template-columns: 22px 1fr;
+            gap: 8px;
+            align-items: start;
+            color: #dbeafe;
+            font-size: 0.88rem;
+            line-height: 1.45;
+        }
+
+        .intro-list .material-symbols-rounded {
+            color: #34d399;
+            font-size: 18px;
+            margin-top: 1px;
+        }
+
+        .intro-note {
+            margin-top: auto;
+            font-size: 0.82rem;
+            color: #93c5fd;
+            border-top: 1px solid rgba(147, 197, 253, 0.28);
+            padding-top: 14px;
         }
 
         .demo-card {
-            background: rgba(18, 24, 38, 0.86);
-            border: 1px solid rgba(255, 255, 255, 0.09);
+            background: rgba(17, 24, 39, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.11);
             border-radius: 18px;
-            padding: 40px;
+            padding: 34px;
             box-shadow: var(--shadow-lg);
             backdrop-filter: blur(10px);
         }
 
         .demo-card h2 {
-            font-size: 1.65rem;
+            font-size: 1.55rem;
             font-weight: 700;
-            color: var(--text-dark);
-            margin-bottom: 6px;
-            letter-spacing: -0.5px;
+            color: #f8fbff;
+            margin-bottom: 4px;
+            letter-spacing: -0.4px;
         }
 
         .demo-card .subtitle {
-            color: var(--text-gray);
-            font-size: 0.95rem;
-            margin-bottom: 28px;
+            color: #cbd5e1;
+            font-size: 0.92rem;
+            margin-bottom: 24px;
         }
 
-        .form-group { margin-bottom: 18px; }
+        .form-group { margin-bottom: 16px; }
 
         .form-group label {
             display: block;
-            font-weight: 500;
-            font-size: 0.88rem;
+            font-weight: 600;
+            font-size: 0.84rem;
             margin-bottom: 8px;
-            color: var(--text-gray);
+            color: #cbd5e1;
         }
 
         .form-row {
@@ -290,12 +366,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .input-field {
             width: 100%;
-            padding: 12px 14px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 12px 13px;
+            border: 1px solid rgba(148, 163, 184, 0.28);
             border-radius: 10px;
-            background: rgba(11, 15, 26, 0.92);
-            color: var(--text-dark);
-            font-size: 0.95rem;
+            background: rgba(8, 12, 22, 0.9);
+            color: #f8fafc;
+            font-size: 0.93rem;
             transition: all 0.2s;
         }
 
@@ -305,23 +381,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .input-field:focus {
             outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+            border-color: rgba(147, 197, 253, 0.9);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
         }
 
-        .text-danger { color: #ef4444; }
+        .text-danger { color: #fb7185; }
 
         .plan-helper {
             font-size: 0.8rem;
-            color: var(--text-light);
+            color: #a5b4cc;
             margin-top: -2px;
             margin-bottom: 10px;
         }
 
         .plan-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
             align-items: stretch;
         }
 
@@ -331,10 +407,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             cursor: pointer;
         }
 
-        .plan-option.wide {
-            grid-column: 1 / -1;
-        }
-
         .plan-option input {
             position: absolute;
             opacity: 0;
@@ -342,13 +414,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         .plan-card-content {
-            display: block;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
             width: 100%;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(11, 15, 26, 0.88);
+            height: 100%;
+            border: 1px solid rgba(148, 163, 184, 0.26);
+            background: linear-gradient(170deg, rgba(12, 19, 35, 0.95) 0%, rgba(10, 15, 27, 0.95) 100%);
             border-radius: 12px;
-            padding: 12px 36px 12px 12px;
-            min-height: 112px;
+            padding: 11px 35px 11px 11px;
+            min-height: 108px;
             transition: all 0.2s ease;
             position: relative;
         }
@@ -367,49 +442,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         .plan-option:hover .plan-card-content {
-            border-color: rgba(96, 165, 250, 0.5);
+            border-color: rgba(96, 165, 250, 0.65);
             transform: translateY(-1px);
         }
 
         .plan-option input:focus + .plan-card-content {
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
         }
 
         .plan-option input:checked + .plan-card-content {
-            border-color: var(--accent);
-            background: linear-gradient(180deg, rgba(30, 41, 59, 0.96) 0%, rgba(18, 24, 38, 0.95) 100%);
-            box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.45);
+            border-color: rgba(139, 92, 246, 0.9);
+            background: linear-gradient(175deg, rgba(30, 41, 59, 0.96) 0%, rgba(15, 23, 42, 0.95) 100%);
+            box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.55), 0 8px 20px rgba(29, 78, 216, 0.18);
         }
 
         .plan-option input:checked + .plan-card-content::after {
             background: var(--accent);
             border-color: var(--accent);
-            box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.9);
+            box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.92);
         }
 
         .plan-name {
             display: block;
-            font-weight: 600;
-            color: var(--text-dark);
-            margin-bottom: 2px;
-            font-size: 0.92rem;
+            font-weight: 700;
+            color: #f8fbff;
+            font-size: 0.94rem;
         }
 
         .plan-meta {
             display: block;
-            font-size: 0.8rem;
-            color: var(--text-gray);
-            line-height: 1.35;
             max-width: 100%;
+        }
+
+        .plan-capacity {
+            display: block;
+            font-size: 0.79rem;
+            color: #b8c3d8;
+            line-height: 1.34;
+        }
+
+        .plan-price {
+            display: block;
+            margin-top: 2px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #93c5fd;
+        }
+
+        .email-row {
+            display: flex;
+            gap: 10px;
         }
 
         .otp-group {
             display: none;
-            background: rgba(11, 15, 26, 0.72);
+            background: rgba(8, 12, 22, 0.76);
             padding: 14px;
             border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.09);
-            margin-bottom: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.11);
+            margin-bottom: 16px;
         }
 
         .btn {
@@ -424,29 +515,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             cursor: pointer;
             border: none;
             font-family: inherit;
-            font-size: 0.95rem;
+            font-size: 0.94rem;
         }
 
         .btn-primary {
             background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
             color: #ffffff;
-            box-shadow: 0 0 15px var(--primary-glow);
+            box-shadow: 0 0 16px var(--primary-glow);
         }
 
         .btn-primary:hover {
             background: var(--accent-hover);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.32);
         }
 
         .btn-outline {
             background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            color: var(--text-dark);
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            color: #e2e8f0;
         }
 
         .btn-outline:hover {
-            background: var(--surface-light);
-            border-color: rgba(96, 165, 250, 0.45);
+            background: rgba(37, 99, 235, 0.16);
+            border-color: rgba(96, 165, 250, 0.75);
         }
 
         .btn-block {
@@ -457,24 +548,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .success-view {
             text-align: center;
-            padding: 32px 0;
+            padding: 28px 4px;
         }
 
         .success-view .material-symbols-rounded {
             font-size: 56px;
             color: #10b981;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
         .success-view h3 {
-            font-size: 1.3rem;
+            font-size: 1.36rem;
             font-weight: 700;
             margin-bottom: 8px;
-            color: var(--text-dark);
+            color: #f8fbff;
         }
 
         .success-view p {
-            color: var(--text-gray);
+            color: #cbd5e1;
             font-size: 0.95rem;
             margin-bottom: 24px;
         }
@@ -490,13 +581,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             border-radius: 8px;
             margin-bottom: 16px;
             font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        @media (max-width: 980px) {
+            .demo-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .demo-intro {
+                padding: 24px 20px;
+            }
         }
 
         @media (max-width: 760px) {
-            .demo-card { padding: 28px 20px; }
-            .form-row { flex-direction: column; gap: 0; }
-            .plan-grid { grid-template-columns: 1fr; }
-            .back-btn { top: 12px; left: 12px; padding: 8px 14px; font-size: 0.85rem; }
+            body {
+                padding: 78px 14px 24px;
+            }
+
+            .demo-card {
+                padding: 24px 16px;
+            }
+
+            .form-row {
+                flex-direction: column;
+                gap: 0;
+            }
+
+            .plan-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .email-row {
+                flex-direction: column;
+            }
+
+            .back-btn {
+                top: 12px;
+                left: 12px;
+                padding: 8px 13px;
+                font-size: 0.82rem;
+            }
         }
 
         @keyframes spin { 100% { transform: rotate(360deg); } }
