@@ -6,6 +6,21 @@ require_once '../backend/tenant_identity.php';
 $form_success = false;
 $form_error = '';
 
+function demo_column_exists(PDO $pdo, $table, $column)
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
+    $stmt->execute([$column]);
+    $cache[$key] = (bool) $stmt->fetch();
+
+    return $cache[$key];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'request_demo') {
     $institution_name = trim($_POST['institution_name'] ?? '');
     $contact_first_name = trim($_POST['contact_first_name'] ?? '');
@@ -56,6 +71,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $pdo->beginTransaction();
 
                 $tenant_id = mf_generate_tenant_id($pdo, 10);
+
+                    $has_demo_schedule_date = demo_column_exists($pdo, 'tenants', 'demo_schedule_date');
+                    if ($has_demo_schedule_date) {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO tenants (
+                                tenant_id, tenant_name, first_name, last_name,
+                                mi, suffix, branch_name, plan_tier,
+                                email, demo_schedule_date, status
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Demo Requested')
+                        ");
+                        $stmt->execute([
+                            $tenant_id, $institution_name, $contact_first_name, $contact_last_name,
+                            $contact_mi, $contact_suffix, $location, $plan_tier,
+                            $company_email, $demo_schedule_date
+                        ]);
+                    } else {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO tenants (
+                                tenant_id, tenant_name, first_name, last_name,
+                                mi, suffix, branch_name, plan_tier,
+                                email, status
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Demo Requested')
+                        ");
+                        $stmt->execute([
+                            $tenant_id, $institution_name, $contact_first_name, $contact_last_name,
+                            $contact_mi, $contact_suffix, $location, $plan_tier,
+                            $company_email
+                        ]);
+                    }
 
                 $stmt = $pdo->prepare("
                     INSERT INTO tenants (
@@ -110,10 +154,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                 $form_success = true;
                 unset($_SESSION['verified_contact_email']);
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
                 }
+                error_log('Demo request submission failed: ' . $e->getMessage());
                 $form_error = 'An error occurred while submitting your request. Please try again later.';
             }
         }
