@@ -16,14 +16,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $plan_tier = $plan_tier === '' ? null : $plan_tier;
     $company_email = trim($_POST['company_email'] ?? '');
     $demo_schedule_date = trim($_POST['demo_schedule_date'] ?? '');
+    $uploaded_files = $_FILES['legitimacy_documents'] ?? null;
+
+    $document_count = 0;
+    if (is_array($uploaded_files) && isset($uploaded_files['name']) && is_array($uploaded_files['name'])) {
+        foreach ($uploaded_files['name'] as $idx => $name) {
+            if (($uploaded_files['error'][$idx] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $document_count++;
+            }
+        }
+    }
 
     $is_otp_verified = false;
     if (isset($_SESSION['verified_contact_email']) && $_SESSION['verified_contact_email'] === $company_email) {
         $is_otp_verified = true;
     }
 
-    if ($institution_name === '' || $company_email === '') {
+    if ($institution_name === '' || $company_email === '' || $plan_tier === '') {
         $form_error = 'Institution Name and Work Email are required.';
+    } elseif ($document_count < 1 || $document_count > 5) {
+        $form_error = 'Please upload 1 to 5 proof of legitimacy documents.';
     } elseif (!$is_otp_verified) {
         $form_error = 'Email has not been verified. Please complete OTP verification.';
     } else {
@@ -35,6 +47,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $form_error = 'A demo request with this email already exists. Our team will contact you shortly.';
         } else {
             try {
+                $allowed_extensions = [
+                    'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff',
+                    'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf', 'odt', 'ods', 'odp'
+                ];
+
+                $pdo->beginTransaction();
+
                 $base_slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $institution_name)));
                 $tenant_id = $base_slug . '-' . substr(bin2hex(random_bytes(2)), 0, 4);
 
@@ -51,26 +70,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $company_email, $demo_schedule_date
                 ]);
 
-                // Handle Business Permit Upload
-                if (isset($_FILES['business_permit']) && $_FILES['business_permit']['error'] == UPLOAD_ERR_OK) {
-                    $upload_dir = __DIR__ . '/../uploads/business_permits/';
-                    if (!is_dir($upload_dir)) {
-                        mkdir($upload_dir, 0777, true);
-                    }
-                    $file_ext = pathinfo($_FILES['business_permit']['name'], PATHINFO_EXTENSION);
-                    $file_name = $tenant_id . '_permit.' . $file_ext;
-                    $file_path = $upload_dir . $file_name;
-                    
-                    if (move_uploaded_file($_FILES['business_permit']['tmp_name'], $file_path)) {
-                        $permit_relative_path = '../uploads/business_permits/' . $file_name;
-                        $update_stmt = $pdo->prepare("UPDATE tenants SET business_permit_path = ? WHERE tenant_id = ?");
-                        $update_stmt->execute([$permit_relative_path, $tenant_id]);
-                    }
+                $upload_dir = __DIR__ . '/../uploads/business_permits/';
+                if (!is_dir($upload_dir) && !mkdir($upload_dir, 0777, true)) {
+                    throw new Exception('Failed to prepare upload directory.');
                 }
+
+                $doc_stmt = $pdo->prepare(
+                    "INSERT INTO tenant_legitimacy_documents (tenant_id, original_file_name, file_path) VALUES (?, ?, ?)"
+                );
+
+                $file_sequence = 1;
+                foreach ($uploaded_files['name'] as $idx => $original_name) {
+                    $error_code = $uploaded_files['error'][$idx] ?? UPLOAD_ERR_NO_FILE;
+                    if ($error_code === UPLOAD_ERR_NO_FILE) {
+                        continue;
+                    }
+
+                    if ($error_code !== UPLOAD_ERR_OK) {
+                        throw new Exception('One of the uploaded files failed to upload.');
+                    }
+
+                    $extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+                    if (!in_array($extension, $allowed_extensions, true)) {
+                        throw new Exception('Unsupported file type detected in uploads.');
+                    }
+
+                    $stored_name = $tenant_id . '_doc_' . $file_sequence . '_' . time() . '_' . bin2hex(random_bytes(2)) . '.' . $extension;
+                    $target_path = $upload_dir . $stored_name;
+                    if (!move_uploaded_file($uploaded_files['tmp_name'][$idx], $target_path)) {
+                        throw new Exception('Unable to save one of the uploaded documents.');
+                    }
+
+                    $relative_path = '../uploads/business_permits/' . $stored_name;
+                    $doc_stmt->execute([$tenant_id, $original_name, $relative_path]);
+                    $file_sequence++;
+                }
+
+                $pdo->commit();
 
                 $form_success = true;
                 unset($_SESSION['verified_contact_email']);
-            } catch (PDOException $e) {
+            } catch (Exception $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
                 $form_error = 'An error occurred while submitting your request. Please try again later.';
             }
         }
