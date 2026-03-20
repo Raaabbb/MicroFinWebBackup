@@ -510,12 +510,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                     <div class="form-group">
                         <label>Subscription Plan (Optional)</label>
-                        <select class="input-field" name="plan_tier">
-                            <option value="">Decide After Demo</option>
-                            <option value="Starter">Starter (Up to 1,000 Borrowers, 250 Staff)</option>
-                            <option value="Pro">Pro (Up to 5,000 Borrowers, 2,000 Staff)</option>
-                            <option value="Enterprise">Enterprise (Unlimited)</option>
-                        </select>
+                        <p class="plan-helper">Pick a plan now, or decide with our team after your demo.</p>
+                        <div class="plan-grid">
+                            <label class="plan-option wide">
+                                <input type="radio" name="plan_tier" value="" checked>
+                                <span class="plan-card-content">
+                                    <span class="plan-name">Decide After Demo</span>
+                                    <span class="plan-meta">No commitment yet. We will recommend the best fit based on your portfolio size.</span>
+                                </span>
+                            </label>
+
+                            <label class="plan-option">
+                                <input type="radio" name="plan_tier" value="Starter">
+                                <span class="plan-card-content">
+                                    <span class="plan-name">Starter</span>
+                                    <span class="plan-meta">Up to 1,000 clients and 250 users</span>
+                                </span>
+                            </label>
+
+                            <label class="plan-option">
+                                <input type="radio" name="plan_tier" value="Growth">
+                                <span class="plan-card-content">
+                                    <span class="plan-name">Growth</span>
+                                    <span class="plan-meta">Up to 2,500 clients and 750 users</span>
+                                </span>
+                            </label>
+
+                            <label class="plan-option">
+                                <input type="radio" name="plan_tier" value="Pro">
+                                <span class="plan-card-content">
+                                    <span class="plan-name">Pro</span>
+                                    <span class="plan-meta">Up to 5,000 clients and 2,000 users</span>
+                                </span>
+                            </label>
+
+                            <label class="plan-option">
+                                <input type="radio" name="plan_tier" value="Enterprise">
+                                <span class="plan-card-content">
+                                    <span class="plan-name">Enterprise</span>
+                                    <span class="plan-meta">Up to 10,000 clients and 5,000 users</span>
+                                </span>
+                            </label>
+
+                            <label class="plan-option wide">
+                                <input type="radio" name="plan_tier" value="Unlimited">
+                                <span class="plan-card-content">
+                                    <span class="plan-name">Unlimited</span>
+                                    <span class="plan-meta">Unlimited clients and users with full platform access</span>
+                                </span>
+                            </label>
+                        </div>
                     </div>
 
                     <div class="form-group">
