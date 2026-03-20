@@ -812,7 +812,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <label style="font-weight:500; font-size:0.85rem; color:var(--text-gray); margin:0;">Enter 6-Digit OTP <span class="text-danger">*</span></label>
                             <span id="otp-countdown" style="font-size: 0.8rem; font-weight: 600; color: #b45309;"></span>
                         </div>
-                        <div style="display: flex; gap: 10px;">
+                        <div class="otp-row">
                             <input type="text" class="input-field" name="otp_code" id="otp_code" placeholder="123456" maxlength="6">
                             <button type="button" id="btn-verify-otp" class="btn btn-primary" style="padding: 0 15px;">Verify</button>
                         </div>
