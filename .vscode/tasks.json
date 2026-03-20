@@ -1,0 +1,50 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "clean_hex",
+			"type": "shell",
+			"command": "C:\\xampp\\php\\php.exe clean_index_hex.php"
+		},
+		{
+			"label": "clean_hex_demo",
+			"type": "shell",
+			"command": "C:\\xampp\\php\\php.exe clean_demo_hex.php"
+		},
+		{
+			"label": "check_demo_style",
+			"type": "shell",
+			"command": "C:\\xampp\\php\\php.exe check_demo_style.php"
+		},
+		{
+			"label": "fix_demo_css",
+			"type": "shell",
+			"command": "C:\\xampp\\php\\php.exe fix_demo_css.php"
+		},
+		{
+			"label": "reinsert_cards",
+			"type": "shell",
+			"command": "C:\\xampp\\php\\php.exe reinsert_cards.php"
+		},
+		{
+			"label": "lint\\_php",
+			"type": "shell",
+			"command": "C:\\xampp\\php\\php.exe -l microfin_platform/public_website/demo.php"
+		},
+		{
+			"label": "git_stat",
+			"type": "shell",
+			"command": "git status"
+		},
+		{
+			"label": "read_build",
+			"type": "shell",
+			"command": "cat build_visuals.php"
+		},
+		{
+			"label": "check_index",
+			"type": "shell",
+			"command": "cat microfin_platform/public_website/index.php | Select-String \"impact\""
+		}
+	]
+}

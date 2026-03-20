@@ -1,0 +1,41 @@
+<?php
+// backend/setup_database.php
+
+echo "<pre>Initializing Database Setup...\n";
+
+// Use standard XAMPP credentials
+$host = '127.0.0.1';
+$user = 'root';
+$pass = ''; // Default XAMPP has no password
+
+try {
+    // 1. Connect without a specific database first to CREATE it
+    $pdo = new PDO("mysql:host=$host", $user, $pass);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    echo "Connected to MySQL server securely.\n";
+
+    // 2. Read the SQL file
+    $sqlFilePath = '../database-plan.txt';
+    if (!file_exists($sqlFilePath)) {
+        die("Error: database-plan.txt not found at $sqlFilePath\n");
+    }
+    
+    $sql = file_get_contents($sqlFilePath);
+    echo "Read SQL schema file successfully.\n";
+
+    // 2.5 Drop any existing broken database first to ensure a perfectly clean slate
+    $pdo->exec("DROP DATABASE IF EXISTS fundline_microfinancing;");
+
+    // 3. Execute the entire massive script
+    $pdo->exec($sql);
+    
+    echo "\nSUCCESS! The database 'fundline_microfinancing' was created.\n";
+    echo "All 21 tables and 3 default tenants have been inserted.\n";
+    echo "You may now delete this setup_database.php file for security.\n";
+
+} catch (PDOException $e) {
+    echo "\nFATAL ERROR:\n";
+    echo $e->getMessage() . "\n";
+}
+echo "</pre>";
+?>

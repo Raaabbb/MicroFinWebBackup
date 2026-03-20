@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Public+Sans:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-container": "#90efef",
+              "on-secondary-container": "#006e6e",
+              "surface-tint": "#27609d",
+              "tertiary-fixed-dim": "#ffb4a1",
+              "inverse-surface": "#31302d",
+              "on-primary-fixed-variant": "#004882",
+              "surface-container-lowest": "#ffffff",
+              "on-error-container": "#93000a",
+              "on-surface": "#1c1c19",
+              "on-background": "#1c1c19",
+              "inverse-primary": "#a3c9ff",
+              "primary-fixed": "#d3e4ff",
+              "outline": "#727781",
+              "tertiary-container": "#80301b",
+              "secondary": "#006a6a",
+              "tertiary": "#611a07",
+              "error-container": "#ffdad6",
+              "on-secondary-fixed": "#002020",
+              "on-secondary": "#ffffff",
+              "primary-container": "#004b87",
+              "surface-container-low": "#f6f3ee",
+              "on-error": "#ffffff",
+              "outline-variant": "#c2c6d1",
+              "on-primary": "#ffffff",
+              "on-tertiary": "#ffffff",
+              "secondary-fixed-dim": "#76d6d5",
+              "secondary-fixed": "#93f2f2",
+              "on-tertiary-fixed": "#3c0800",
+              "surface-bright": "#fcf9f4",
+              "on-surface-variant": "#424750",
+              "error": "#ba1a1a",
+              "primary": "#003461",
+              "tertiary-fixed": "#ffdbd2",
+              "on-tertiary-fixed-variant": "#7c2e19",
+              "surface-container": "#f0ede8",
+              "background": "#fcf9f4",
+              "surface-container-high": "#ebe8e3",
+              "primary-fixed-dim": "#a3c9ff",
+              "surface-variant": "#e5e2dd",
+              "surface-dim": "#dcdad5",
+              "on-secondary-fixed-variant": "#004f4f",
+              "inverse-on-surface": "#f3f0eb",
+              "surface": "#fcf9f4",
+              "on-tertiary-container": "#ffa189",
+              "on-primary-container": "#8abcff",
+              "surface-container-highest": "#e5e2dd",
+              "on-primary-fixed": "#001c38"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Public Sans"],
+              "label": ["Public Sans"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Public Sans', sans-serif; }
+        h1, h2, h3, h4 { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- TopNavBar Implementation -->
+<nav class="sticky top-0 w-full z-50 bg-[#fcf9f4]/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm dark:shadow-none">
+<div class="flex justify-between items-center h-16 px-6 md:px-12 max-w-7xl mx-auto">
+<div class="text-xl font-bold text-[#003461] dark:text-sky-100 font-['Manrope'] tracking-tight">
+                Editorial Microfinance
+            </div>
+<div class="hidden md:flex items-center space-x-8 font-['Manrope'] font-semibold tracking-tight">
+<a class="text-[#003461] dark:text-sky-300 border-b-2 border-[#006a6a] pb-1" href="#">Loans</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-[#003461] dark:hover:text-sky-200 transition-colors" href="#">Savings</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-[#003461] dark:hover:text-sky-200 transition-colors" href="#">Insurance</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-[#003461] dark:hover:text-sky-200 transition-colors" href="#">About Us</a>
+</div>
+<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary px-5 py-2 rounded-md font-semibold active:scale-95 duration-150 transition-all">
+                Apply Now
+            </button>
+</div>
+</nav>
+<!-- Hero Section -->
+<header class="relative overflow-hidden pt-20 pb-32 px-6 md:px-12 max-w-7xl mx-auto">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+<div class="lg:col-span-7">
+<div class="inline-flex items-center px-3 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed text-xs font-bold mb-6 tracking-wider uppercase">
+                    Trusted by 50,000+ Entrepreneurs
+                </div>
+<h1 class="text-5xl md:text-6xl font-extrabold text-primary leading-[1.1] mb-8 tracking-tight">
+                    Architecting Stability <br/>For Your Ambitions.
+                </h1>
+<p class="text-lg text-on-surface-variant max-w-xl mb-10 leading-relaxed">
+                    We provide the structural capital necessary for sustainable growth. No hidden fees, just editorial-grade financial clarity and unwavering partnership for small businesses.
+                </p>
+<div class="flex flex-wrap gap-4">
+<button class="bg-primary text-on-primary px-8 py-4 rounded-md font-bold text-lg shadow-md hover:shadow-lg transition-shadow">
+                        View Loan Options
+                    </button>
+<button class="px-8 py-4 rounded-md font-bold text-lg text-primary border border-outline-variant hover:bg-surface-container-low transition-colors">
+                        Calculate Interest
+                    </button>
+</div>
+</div>
+<div class="lg:col-span-5 relative">
+<div class="bg-surface-container-highest rounded-xl aspect-[4/5] overflow-hidden relative shadow-2xl">
+<img alt="Professional Finance Consultation" class="w-full h-full object-cover grayscale-[20%] hover:grayscale-0 transition-all duration-700" data-alt="A professional woman reviewing financial documents with a client in a bright office" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBY7e0jDw76a4tNcVaZTCh3yAVGXJb-jJOAmUFpVbKr8zLzL2zF4To-kFSdTEk1X4tJaTj0TMG04FMwKjRbmGjvBGSOQ3GRrVtY_hH6mtJJqYRFoMmPaaKq1adr2aeBppkGURRTg43_Sr5VqWhU_CFbjUbBms2kVkE8qDbdW6ZCmMfL1e8QWgamnhZN5I_rALRk2Wc2ottJNXP661T-MsLXIMHO_bib3bastn0an6xZxIvItg3ax2-lmhxYndIml9btICvEkWpC64Qf"/>
+<div class="absolute bottom-6 left-6 right-6 bg-white/90 backdrop-blur p-6 rounded-lg shadow-xl">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-white">
+<span class="material-symbols-outlined" data-icon="verified_user">verified_user</span>
+</div>
+<div>
+<div class="text-sm font-bold text-primary">Fully Licensed</div>
+<div class="text-xs text-on-surface-variant">Regulated Microfinance Institution</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Partner Section -->
+<section class="bg-surface-container-low py-12">
+<div class="max-w-7xl mx-auto px-6 md:px-12">
+<p class="text-center text-label-md font-bold uppercase tracking-[0.2em] text-secondary mb-10">Strategic Partners</p>
+<div class="flex flex-wrap justify-center items-center gap-12 opacity-60">
+<img alt="Partner Logo" class="h-8 md:h-10 object-contain grayscale" data-alt="Abstract corporate logo in grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDO4dx0MBdmrk7oPt4UJeSFq5Y-Tg7o8D8wWRP-G38xWkIAv-MtqDN2ADM53XFuRqEJ47fJIub3mKyi4wRyts9GiI_DDc5b8HHTvZzQRIHJFFCpuY8RZPkICbMo91CGsfpeJhMBWlnfttYwYmEtteWMIa4zpJ9HGBA8sPHesFALQHU9XCDzsVsa7oSMyXnpprQ7wib1c9iNRCKsU2GeJV_Ucp91tKLDgTFcTEP_d2kD3Hthd2MvxOHIoQBsk9tQWwN_3EW6rI6EQfsE"/>
+<img alt="Partner Logo" class="h-8 md:h-10 object-contain grayscale" data-alt="Abstract corporate logo in grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDCCEyvrAgMHFQEEY2uch6e8o3v5d4BFupwk5bai6Xh4qnr5CdwELFwCtlX2R5au92-h04r8HsaJ742PMr84KmUQDzgOlZuvnmRIO-iq1tf64LS99Emm3OX27wMopZb-kWtbzRC8hDvfivEWxcqmZWZQuWjx3LmpHKfAV8BUZYHUMeEdgEBjHUckDu5w6FonyHXGPNpPCwJSlG12CymLMynkvAhfec_hqJH4rEtm07UHx1rvb4VjdCQke3j85d-jfWMT3TNrypq5yPd"/>
+<img alt="Partner Logo" class="h-8 md:h-10 object-contain grayscale" data-alt="Abstract corporate logo in grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtrtX07LkaCQXDZX7JNb3UpGeo79BWJki-YV5GfhCiecs_1LeA27Mxl7LYBtPjwV2GcmEncoY-7sTNKu_0B7m5ka2xndIYIF4vNQWTED7yOztU5xSDS43Frp08hTYN89V1a0BRBosZuNmxPp7Fsmt9d0ULn8X9TnEUpJTKtjLUWJqv1UdK4d9koI69jJO9_9w4qW6sZ10U0nSi5kjjcqXUaNEhJ1vQ_qQlnokmV6mq6DZ97D4r0Y79xQTiCqaOwwG2y5s_TIG9LpJM"/>
+<img alt="Partner Logo" class="h-8 md:h-10 object-contain grayscale" data-alt="Abstract corporate logo in grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBzrtEOYEvVV75EpS9IRGYixVQhXuSd6qN3mEJSwu8eLfJqy58VX8wyb00TsUGGcJudiFzYlYnPwuNbQo1DPaCO0HFOAGBJhR_oVwhG_mspcFn4IUzGZFNBX18u1HhCgFXX-coXY7iLUPlEuJNimU3tzQHV0QCXdXjx3nWf_nrI-CQgrXbwE9f9QdTwwB0ORucAtUht35K7yK-XUBY3tz_iwULjtAuEDmN42N9fzsU9NMK5IsUMnU5x5UuoHFofT8oUjXmWwfWIpUwQ"/>
+<img alt="Partner Logo" class="h-8 md:h-10 object-contain grayscale" data-alt="Abstract corporate logo in grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtXl66HpQky9ZiqlnK8_HbJjkxGS1NACwV744RwpQVjjT_OZuuefcemoB40jM-UEONk-OZHBHkl0ZIMphfhX3D8raHF9VttrFcHWfLHcw6zharZIDZi7DrWU5UwM4RwK8QprzCDfoLTGM5RXyVoU1hvA7Lzxkp9XJ9lFDqi36FoySE9hPfvjjg914EQnLZWFDoDsNCVVaqZVs6k0o4vSuXJVA5AhMhyBWUadDQ3Z3XAmUO8yFStxbWjf02IPytQvAahgO2z-Vs1jzX"/>
+</div>
+</div>
+</section>
+<!-- Services Grid -->
+<section class="py-24 px-6 md:px-12 max-w-7xl mx-auto">
+<div class="flex flex-col md:flex-row justify-between items-end mb-16 gap-6">
+<div class="max-w-2xl">
+<span class="text-secondary font-bold text-sm tracking-widest uppercase mb-4 block">Our Core Pillars</span>
+<h2 class="text-4xl font-extrabold text-primary tracking-tight">Financial services designed for professional impact.</h2>
+</div>
+<a class="text-secondary font-bold flex items-center gap-2 border-b-2 border-transparent hover:border-secondary transition-all pb-1" href="#">
+                Explore All Products <span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-1">
+<!-- Service 1 -->
+<div class="bg-surface-container p-10 group hover:bg-primary transition-colors duration-500">
+<span class="material-symbols-outlined text-4xl text-secondary group-hover:text-secondary-container mb-8" data-icon="account_balance">account_balance</span>
+<h3 class="text-2xl font-bold text-primary group-hover:text-white mb-4">Enterprise Growth Loans</h3>
+<p class="text-on-surface-variant group-hover:text-primary-fixed leading-relaxed mb-8">
+                    Scale your operations with competitive rates and flexible repayment terms tailored to your business cycle.
+                </p>
+<div class="h-1 w-12 bg-secondary transition-all group-hover:w-full group-hover:bg-secondary-container"></div>
+</div>
+<!-- Service 2 -->
+<div class="bg-surface-container-high p-10 group hover:bg-primary transition-colors duration-500">
+<span class="material-symbols-outlined text-4xl text-secondary group-hover:text-secondary-container mb-8" data-icon="savings">savings</span>
+<h3 class="text-2xl font-bold text-primary group-hover:text-white mb-4">High-Yield Savings</h3>
+<p class="text-on-surface-variant group-hover:text-primary-fixed leading-relaxed mb-8">
+                    Earn more on your deposits with interest rates that outperform traditional high-street banking accounts.
+                </p>
+<div class="h-1 w-12 bg-secondary transition-all group-hover:w-full group-hover:bg-secondary-container"></div>
+</div>
+<!-- Service 3 -->
+<div class="bg-surface-container p-10 group hover:bg-primary transition-colors duration-500">
+<span class="material-symbols-outlined text-4xl text-secondary group-hover:text-secondary-container mb-8" data-icon="security">security</span>
+<h3 class="text-2xl font-bold text-primary group-hover:text-white mb-4">Risk Management</h3>
+<p class="text-on-surface-variant group-hover:text-primary-fixed leading-relaxed mb-8">
+                    Comprehensive insurance packages to protect your assets and ensure business continuity during unforeseen events.
+                </p>
+<div class="h-1 w-12 bg-secondary transition-all group-hover:w-full group-hover:bg-secondary-container"></div>
+</div>
+</div>
+</section>
+<!-- Trust Stats Section (Asymmetric) -->
+<section class="pb-24 px-6 md:px-12 max-w-7xl mx-auto">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center bg-primary rounded-xl overflow-hidden shadow-2xl">
+<div class="lg:col-span-5 aspect-square lg:aspect-auto h-full">
+<img alt="Team collaborating" class="w-full h-full object-cover" data-alt="Three professionals collaborating over a digital tablet in a minimalist office" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDlB-seNHOpxcV6UKfepQulyMIHFpW65hm3-bBcoPZEQKab10X53ztiD-OkUBVTXdG95S2U5et0GIyElXGECG9s_53Mvsh1swQBVN_59yhaP7TonGwz61abCpruyS1XWBSJv7-sLOf7yP_onShzRS7Ad4JTP9BAPIYRZnovDL3iw8sUgvTDi_YOPjI46Dsb1yfkUSKI0FN0HrXWq4prPKyaeN-edmzU2tgPKPBg4lZZKbGZDddD06mSQr99hXZz2GmrK8mP13VPNImt"/>
+</div>
+<div class="lg:col-span-7 p-10 md:p-16 lg:pl-0">
+<h2 class="text-3xl md:text-4xl font-bold text-white mb-8 tracking-tight">Integrity in every transaction. Performance in every portfolio.</h2>
+<div class="grid grid-cols-2 gap-10">
+<div>
+<div class="text-4xl font-extrabold text-secondary-fixed mb-2">98.4%</div>
+<div class="text-primary-fixed text-sm uppercase font-bold tracking-widest">Client Retention</div>
+</div>
+<div>
+<div class="text-4xl font-extrabold text-secondary-fixed mb-2">$420M+</div>
+<div class="text-primary-fixed text-sm uppercase font-bold tracking-widest">Capital Disbursed</div>
+</div>
+<div>
+<div class="text-4xl font-extrabold text-secondary-fixed mb-2">15+</div>
+<div class="text-primary-fixed text-sm uppercase font-bold tracking-widest">Years of Stability</div>
+</div>
+<div>
+<div class="text-4xl font-extrabold text-secondary-fixed mb-2">A+</div>
+<div class="text-primary-fixed text-sm uppercase font-bold tracking-widest">Credit Rating</div>
+</div>
+</div>
+<button class="mt-12 text-white border-b-2 border-secondary-fixed-dim pb-1 font-bold inline-flex items-center gap-2 hover:text-secondary-fixed transition-colors">
+                    Read our latest Impact Report <span class="material-symbols-outlined" data-icon="download">download</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Loan Progress Demo Component -->
+<section class="bg-surface-container-low py-24 px-6 md:px-12">
+<div class="max-w-4xl mx-auto bg-white p-8 md:p-12 rounded shadow-sm">
+<div class="flex items-center justify-between mb-8">
+<div>
+<h3 class="text-xl font-bold text-primary">Live Loan Performance</h3>
+<p class="text-sm text-on-surface-variant">Transparency in our collective growth.</p>
+</div>
+<div class="text-right">
+<span class="text-2xl font-bold text-secondary">$12.5M</span>
+<span class="block text-[10px] font-bold uppercase tracking-tighter text-on-surface-variant">Currently Active</span>
+</div>
+</div>
+<div class="space-y-10">
+<div>
+<div class="flex justify-between text-xs font-bold uppercase mb-3">
+<span>Small Business Development</span>
+<span class="text-secondary">72% Goal Met</span>
+</div>
+<div class="w-full h-2 bg-surface-variant overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-secondary-fixed-dim w-[72%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-xs font-bold uppercase mb-3">
+<span>Agricultural Sustainability</span>
+<span class="text-secondary">48% Goal Met</span>
+</div>
+<div class="w-full h-2 bg-surface-variant overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-secondary-fixed-dim w-[48%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-xs font-bold uppercase mb-3">
+<span>Tech Innovation Fund</span>
+<span class="text-secondary">91% Goal Met</span>
+</div>
+<div class="w-full h-2 bg-surface-variant overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-secondary-fixed-dim w-[91%]"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Footer Implementation -->
+<footer class="bg-[#fcf9f4] dark:bg-slate-950 w-full border-t border-[#c2c6d1]/20">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-8 py-12 px-6 md:px-12 max-w-7xl mx-auto">
+<div>
+<div class="text-lg font-bold text-[#003461] dark:text-sky-100 mb-6">Editorial Microfinance</div>
+<p class="text-sm text-slate-500 max-w-xs">Building financial foundations through clarity, trust, and architectural precision in capital disbursement.</p>
+</div>
+<div class="flex flex-col space-y-3 font-['Public_Sans'] text-sm text-[#1c1c19] dark:text-slate-300">
+<span class="font-bold text-primary dark:text-sky-400 mb-2">Company</span>
+<a class="text-slate-500 dark:text-slate-500 hover:text-[#003461] dark:hover:text-sky-300 transition-all duration-300 underline-offset-4 hover:underline" href="#">Privacy Policy</a>
+<a class="text-slate-500 dark:text-slate-500 hover:text-[#003461] dark:hover:text-sky-300 transition-all duration-300 underline-offset-4 hover:underline" href="#">Terms of Service</a>
+<a class="text-slate-500 dark:text-slate-500 hover:text-[#003461] dark:hover:text-sky-300 transition-all duration-300 underline-offset-4 hover:underline" href="#">Financial Disclosures</a>
+</div>
+<div class="flex flex-col space-y-3 font-['Public_Sans'] text-sm text-[#1c1c19] dark:text-slate-300">
+<span class="font-bold text-primary dark:text-sky-400 mb-2">Resources</span>
+<a class="text-slate-500 dark:text-slate-500 hover:text-[#003461] dark:hover:text-sky-300 transition-all duration-300 underline-offset-4 hover:underline" href="#">Contact Support</a>
+<a class="text-slate-500 dark:text-slate-500 hover:text-[#003461] dark:hover:text-sky-300 transition-all duration-300 underline-offset-4 hover:underline" href="#">Careers</a>
+<a class="text-slate-500 dark:text-slate-500 hover:text-[#003461] dark:hover:text-sky-300 transition-all duration-300 underline-offset-4 hover:underline" href="#">Impact Report</a>
+</div>
+<div>
+<span class="font-bold text-primary dark:text-sky-400 mb-4 block">Our Newsletter</span>
+<div class="flex bg-surface-container-high rounded-md overflow-hidden">
+<input class="bg-transparent border-none text-sm px-4 py-2 w-full focus:ring-0" placeholder="Email address" type="email"/>
+<button class="bg-primary text-on-primary px-3 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="send">send</span>
+</button>
+</div>
+</div>
+</div>
+<div class="max-w-7xl mx-auto px-6 md:px-12 py-8 border-t border-[#c2c6d1]/10">
+<div class="text-sm text-slate-500 text-center">
+                © 2024 Editorial Microfinance. All rights reserved.
+            </div>
+</div>
+</footer>
+</body></html>

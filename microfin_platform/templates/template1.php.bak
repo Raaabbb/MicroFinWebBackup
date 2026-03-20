@@ -1,0 +1,331 @@
+<?php
+/**
+ * Template 1 — Modern Material (Bento/Card layout with hero overlay)
+ * Adapted for MicroFin multi-tenant platform.
+ * All variables are passed from site.php via include scope.
+ */
+
+$headline_font = 'Manrope';
+$body_font = $font_family ?: 'Inter';
+$p = $palette;
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title><?php echo $e($tenant_name); ?> — Official Website</title>
+<?php if ($meta_desc): ?><meta name="description" content="<?php echo $e($meta_desc); ?>"><?php endif; ?>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=<?php echo urlencode($headline_font); ?>:wght@400;500;700;800&family=<?php echo urlencode($body_font); ?>:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+    theme: {
+        extend: {
+            colors: <?php echo json_encode($p, JSON_UNESCAPED_SLASHES); ?>,
+            fontFamily: {
+                "headline": ["<?php echo $e($headline_font); ?>"],
+                "body": ["<?php echo $e($body_font); ?>"],
+                "label": ["<?php echo $e($body_font); ?>"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+        },
+    },
+}
+</script>
+<style>
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    vertical-align: middle;
+}
+.glass-effect {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px);
+}
+</style>
+<?php if ($custom_css !== ''): ?><style><?php echo strip_tags($custom_css); ?></style><?php endif; ?>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-secondary-container selection:text-on-secondary-container">
+
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-16 bg-background">
+    <div class="flex items-center gap-8">
+        <span class="text-xl font-extrabold text-primary font-headline tracking-tight flex items-center gap-2">
+            <?php if ($logo): ?><img src="<?php echo $e($logo); ?>" alt="Logo" class="h-8 w-8 rounded-lg object-cover"><?php endif; ?>
+            <?php echo $e($tenant_name); ?>
+        </span>
+        <nav class="hidden md:flex gap-6">
+            <a class="text-primary border-b-2 border-primary font-headline font-bold tracking-tight py-1" href="#">Home</a>
+            <?php if ($show_about): ?><a class="text-on-surface-variant hover:bg-surface-container-high transition-colors px-2 py-1 rounded" href="#about">About</a><?php endif; ?>
+            <?php if ($show_services && !empty($services)): ?><a class="text-on-surface-variant hover:bg-surface-container-high transition-colors px-2 py-1 rounded" href="#services">Services</a><?php endif; ?>
+            <?php if ($show_contact): ?><a class="text-on-surface-variant hover:bg-surface-container-high transition-colors px-2 py-1 rounded" href="#contact">Contact</a><?php endif; ?>
+            <?php if ($show_download_section): ?><a class="text-on-surface-variant hover:bg-surface-container-high transition-colors px-2 py-1 rounded" href="#download">Download</a><?php endif; ?>
+        </nav>
+    </div>
+    <div class="flex items-center gap-4">
+        <a href="<?php echo $e($hero_cta_url); ?>" class="hidden md:inline-flex px-5 py-2.5 bg-primary text-on-primary font-bold rounded-md hover:opacity-90 transition-all text-sm no-underline"><?php echo $e($hero_cta_text); ?></a>
+    </div>
+</header>
+
+<main class="pt-16">
+    <!-- Hero Section -->
+    <section class="relative min-h-[600px] md:min-h-[750px] flex items-center px-6 md:px-12 py-20 overflow-hidden">
+        <div class="container mx-auto grid md:grid-cols-2 gap-12 items-center z-10">
+            <div class="max-w-2xl">
+                <?php if ($hero_subtitle): ?>
+                <span class="inline-block px-4 py-1.5 mb-6 text-sm font-bold tracking-widest uppercase bg-secondary-container text-secondary rounded-full font-label"><?php echo $e($hero_subtitle); ?></span>
+                <?php endif; ?>
+                <h1 class="text-4xl md:text-6xl font-extrabold font-headline text-primary leading-[1.1] mb-8 tracking-tight">
+                    <?php echo nl2br($e($hero_title)); ?>
+                </h1>
+                <?php if ($hero_desc): ?>
+                <p class="text-lg md:text-xl text-on-surface-variant font-body mb-10 max-w-lg leading-relaxed">
+                    <?php echo $e($hero_desc); ?>
+                </p>
+                <?php endif; ?>
+                <div class="flex flex-wrap gap-4">
+                    <a href="<?php echo $e($hero_cta_url); ?>" class="px-8 py-4 bg-gradient-to-r from-primary to-primary-container text-on-primary font-bold rounded-md hover:opacity-90 transition-all flex items-center gap-2 no-underline">
+                        <?php echo $e($hero_cta_text); ?>
+                        <span class="material-symbols-outlined">arrow_forward</span>
+                    </a>
+                    <?php if ($show_about): ?>
+                    <a href="#about" class="px-8 py-4 bg-surface-container-highest text-on-primary-fixed-variant font-bold rounded-md hover:bg-surface-container-high transition-all no-underline">
+                        Learn More
+                    </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="relative hidden md:block">
+                <?php if ($hero_image): ?>
+                <div class="aspect-square rounded-2xl overflow-hidden shadow-2xl">
+                    <img alt="<?php echo $e($tenant_name); ?>" class="w-full h-full object-cover" src="<?php echo $e($hero_image); ?>"/>
+                </div>
+                <?php else: ?>
+                <div class="aspect-square rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-primary/20" style="font-size: 120px;">account_balance</span>
+                </div>
+                <?php endif; ?>
+                <!-- Stats Overlay Card -->
+                <div class="absolute -bottom-8 -left-8 glass-effect p-6 rounded-xl shadow-lg border border-white/20 max-w-xs">
+                    <div class="flex items-center gap-4 mb-4">
+                        <div class="p-3 bg-secondary-container text-secondary rounded-full">
+                            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">groups</span>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-bold font-headline text-primary"><?php echo number_format($total_clients); ?>+</p>
+                            <p class="text-xs font-medium text-on-surface-variant uppercase tracking-tighter">Active Members</p>
+                        </div>
+                    </div>
+                    <div class="h-2 w-full bg-secondary-container rounded-full overflow-hidden">
+                        <div class="h-full bg-secondary w-3/4"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Background Decorative -->
+        <div class="absolute top-0 right-0 -z-10 w-1/2 h-full bg-surface-container-low opacity-50 skew-x-12 translate-x-24"></div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="py-24 px-6 bg-surface">
+        <div class="container mx-auto">
+            <div class="mb-16">
+                <h2 class="text-sm font-bold text-secondary uppercase tracking-[0.2em] mb-4">Our Process</h2>
+                <h3 class="text-4xl font-extrabold font-headline text-primary">Simple Steps to Growth</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-surface-container-high p-8 rounded-2xl flex flex-col justify-between group hover:bg-surface-container-highest transition-colors">
+                    <div>
+                        <span class="text-5xl font-extrabold text-primary/10 mb-6 block">01</span>
+                        <h4 class="text-xl font-bold font-headline text-primary mb-4">Quick Application</h4>
+                        <p class="text-on-surface-variant leading-relaxed">Complete our simple form using your mobile device. No paperwork, just purpose.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-primary mt-8 group-hover:translate-x-2 transition-transform">edit_note</span>
+                </div>
+                <div class="bg-primary text-on-primary p-8 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <span class="text-5xl font-extrabold text-white/10 mb-6 block">02</span>
+                        <h4 class="text-xl font-bold font-headline text-white mb-4">Swift Review</h4>
+                        <p class="text-primary-fixed/80 leading-relaxed">Our review process focuses on your potential. Get a decision fast.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-secondary-fixed mt-8">verified_user</span>
+                </div>
+                <div class="bg-surface-container-high p-8 rounded-2xl flex flex-col justify-between group hover:bg-surface-container-highest transition-colors">
+                    <div>
+                        <span class="text-5xl font-extrabold text-primary/10 mb-6 block">03</span>
+                        <h4 class="text-xl font-bold font-headline text-primary mb-4">Disbursement</h4>
+                        <p class="text-on-surface-variant leading-relaxed">Funds are sent directly to your account. Start growing immediately.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-primary mt-8 group-hover:translate-x-2 transition-transform">account_balance_wallet</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <?php if ($show_services && !empty($services)): ?>
+    <!-- Services / Loan Products -->
+    <section id="services" class="py-24 px-6 bg-surface-container-low">
+        <div class="container mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-end mb-16 gap-6">
+                <div class="max-w-xl">
+                    <h2 class="text-sm font-bold text-secondary uppercase tracking-[0.2em] mb-4"><?php echo $e($services_heading); ?></h2>
+                    <h3 class="text-4xl font-extrabold font-headline text-primary leading-tight">Tailored for Your Needs</h3>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <?php foreach ($services as $i => $svc): ?>
+                <div class="bg-surface-container-lowest rounded-2xl p-8 border border-outline-variant/15 flex flex-col justify-between <?php echo ($i === 0) ? 'md:col-span-2 md:flex-row md:gap-8 md:items-center' : ''; ?>">
+                    <div>
+                        <div class="w-12 h-12 bg-primary-fixed text-primary flex items-center justify-center rounded-xl mb-6">
+                            <span class="material-symbols-outlined"><?php echo $e($svc['icon'] ?? 'star'); ?></span>
+                        </div>
+                        <h4 class="text-xl font-bold font-headline text-primary mb-4"><?php echo $e($svc['title'] ?? ''); ?></h4>
+                        <p class="text-on-surface-variant text-sm mb-6 leading-relaxed"><?php echo $e($svc['description'] ?? ''); ?></p>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($show_about): ?>
+    <!-- About / Impact Section -->
+    <section id="about" class="py-24 px-6 overflow-hidden">
+        <div class="container mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-sm font-bold text-secondary uppercase tracking-[0.2em] mb-4"><?php echo $e($about_heading); ?></h2>
+                <h3 class="text-4xl font-extrabold font-headline text-primary">Our Impact</h3>
+            </div>
+            <div class="flex flex-col md:flex-row gap-12 items-center">
+                <div class="w-full md:w-1/2 relative">
+                    <?php if ($about_image): ?>
+                    <div class="relative z-10 aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl">
+                        <img alt="About <?php echo $e($tenant_name); ?>" class="w-full h-full object-cover" src="<?php echo $e($about_image); ?>"/>
+                    </div>
+                    <?php else: ?>
+                    <div class="relative z-10 aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-primary/20" style="font-size: 80px;">apartment</span>
+                    </div>
+                    <?php endif; ?>
+                    <div class="absolute -top-6 -right-6 w-32 h-32 bg-secondary-container rounded-full -z-0"></div>
+                    <div class="absolute -bottom-6 -left-6 w-48 h-48 bg-surface-container-high rounded-3xl -z-0"></div>
+                </div>
+                <div class="w-full md:w-1/2 md:pl-12">
+                    <?php if ($about_body): ?>
+                    <span class="material-symbols-outlined text-secondary text-6xl mb-6 opacity-30">format_quote</span>
+                    <p class="text-xl md:text-2xl font-headline font-bold text-primary mb-8 leading-snug">
+                        <?php echo nl2br($e($about_body)); ?>
+                    </p>
+                    <?php endif; ?>
+                    <div class="flex items-center gap-6 mt-8">
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-primary font-headline"><?php echo number_format($total_clients); ?>+</p>
+                            <p class="text-xs font-bold text-on-surface-variant uppercase">Active Members</p>
+                        </div>
+                        <div class="h-10 w-[1px] bg-outline-variant/30"></div>
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-secondary font-headline"><?php echo number_format($total_loans); ?>+</p>
+                            <p class="text-xs font-bold text-on-surface-variant uppercase">Loans Funded</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($show_download_section): ?>
+    <!-- Download CTA Section -->
+    <section id="download" class="py-20 px-6">
+        <div class="container mx-auto">
+            <div class="bg-primary-container rounded-[2rem] p-12 md:p-20 text-center relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-primary to-transparent opacity-50"></div>
+                <div class="relative z-10 max-w-2xl mx-auto">
+                    <h2 class="text-3xl md:text-5xl font-extrabold font-headline text-white mb-8"><?php echo $e($download_title); ?></h2>
+                    <?php if ($download_description): ?>
+                    <p class="text-primary-fixed/80 text-lg mb-12"><?php echo nl2br($e($download_description)); ?></p>
+                    <?php endif; ?>
+                    <a href="<?php echo $e($download_url); ?>" target="_blank" rel="noopener noreferrer" class="inline-block px-10 py-5 bg-white text-primary font-bold rounded-md hover:bg-surface-container-lowest transition-all no-underline"><?php echo $e($download_button_text); ?></a>
+                </div>
+            </div>
+        </div>
+    </section>
+    <?php endif; ?>
+</main>
+
+<!-- Footer -->
+<footer id="contact" class="bg-surface-container-lowest pt-20 pb-12 px-6 border-t border-outline-variant/10">
+    <div class="container mx-auto">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
+            <div class="col-span-1 md:col-span-1">
+                <span class="text-2xl font-extrabold text-primary font-headline tracking-tight block mb-6"><?php echo $e($tenant_name); ?></span>
+                <?php if ($contact_address): ?>
+                <p class="text-sm text-on-surface-variant leading-relaxed"><?php echo nl2br($e($contact_address)); ?></p>
+                <?php endif; ?>
+            </div>
+            <?php if ($show_services && !empty($services)): ?>
+            <div>
+                <h5 class="font-bold text-primary mb-6"><?php echo $e($services_heading); ?></h5>
+                <ul class="space-y-4 text-sm text-on-surface-variant">
+                    <?php foreach (array_slice($services, 0, 4) as $svc): ?>
+                    <li><?php echo $e($svc['title'] ?? ''); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+            <?php endif; ?>
+            <div>
+                <h5 class="font-bold text-primary mb-6">Quick Links</h5>
+                <ul class="space-y-4 text-sm text-on-surface-variant">
+                    <?php if ($show_about): ?><li><a class="hover:text-primary transition-colors" href="#about">About</a></li><?php endif; ?>
+                    <?php if ($show_services): ?><li><a class="hover:text-primary transition-colors" href="#services">Services</a></li><?php endif; ?>
+                    <?php if ($show_download_section): ?><li><a class="hover:text-primary transition-colors" href="#download">Download</a></li><?php endif; ?>
+                    <?php if ($show_contact): ?><li><a class="hover:text-primary transition-colors" href="#contact">Contact</a></li><?php endif; ?>
+                </ul>
+            </div>
+            <?php if ($show_contact): ?>
+            <div>
+                <h5 class="font-bold text-primary mb-6">Contact</h5>
+                <ul class="space-y-4 text-sm text-on-surface-variant">
+                    <?php if ($contact_phone): ?><li><?php echo $e($contact_phone); ?></li><?php endif; ?>
+                    <?php if ($contact_email): ?><li><a class="hover:text-primary transition-colors" href="mailto:<?php echo $e($contact_email); ?>"><?php echo $e($contact_email); ?></a></li><?php endif; ?>
+                    <?php if ($contact_hours): ?><li><?php echo $e($contact_hours); ?></li><?php endif; ?>
+                </ul>
+            </div>
+            <?php endif; ?>
+        </div>
+        <div class="pt-8 border-t border-outline-variant/10 flex flex-col md:flex-row justify-between items-center gap-6">
+            <p class="text-xs text-on-surface-variant">&copy; <?php echo date('Y'); ?> <?php echo $e($tenant_name); ?>. All rights reserved.</p>
+        </div>
+    </div>
+</footer>
+
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-4 pt-2 md:hidden bg-white/70 backdrop-blur-xl border-t border-outline-variant/15 shadow-[0_-4px_24px_rgba(0,0,0,0.06)]">
+    <a href="#" class="flex flex-col items-center justify-center bg-secondary-container text-secondary rounded-2xl px-4 py-1 no-underline">
+        <span class="material-symbols-outlined">home</span>
+        <span class="font-label text-[10px] uppercase tracking-widest font-bold mt-1">Home</span>
+    </a>
+    <?php if ($show_about): ?>
+    <a href="#about" class="flex flex-col items-center justify-center text-on-surface-variant opacity-80 hover:opacity-100 no-underline">
+        <span class="material-symbols-outlined">info</span>
+        <span class="font-label text-[10px] uppercase tracking-widest font-bold mt-1">About</span>
+    </a>
+    <?php endif; ?>
+    <?php if ($show_services && !empty($services)): ?>
+    <a href="#services" class="flex flex-col items-center justify-center text-on-surface-variant opacity-80 hover:opacity-100 no-underline">
+        <span class="material-symbols-outlined">widgets</span>
+        <span class="font-label text-[10px] uppercase tracking-widest font-bold mt-1">Services</span>
+    </a>
+    <?php endif; ?>
+    <?php if ($show_contact): ?>
+    <a href="#contact" class="flex flex-col items-center justify-center text-on-surface-variant opacity-80 hover:opacity-100 no-underline">
+        <span class="material-symbols-outlined">call</span>
+        <span class="font-label text-[10px] uppercase tracking-widest font-bold mt-1">Contact</span>
+    </a>
+    <?php endif; ?>
+</nav>
+
+</body>
+</html>
