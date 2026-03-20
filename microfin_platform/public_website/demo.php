@@ -101,19 +101,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         ]);
                     }
 
-                $stmt = $pdo->prepare("
-                    INSERT INTO tenants (
-                        tenant_id, tenant_name, first_name, last_name,
-                        mi, suffix, branch_name, plan_tier,
-                        email, demo_schedule_date, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Demo Requested')
-                ");
-                $stmt->execute([
-                    $tenant_id, $institution_name, $contact_first_name, $contact_last_name,
-                    $contact_mi, $contact_suffix, $location, $plan_tier,
-                    $company_email, $demo_schedule_date
-                ]);
-
                 $upload_dir = __DIR__ . '/../uploads/business_permits/';
                 if (!is_dir($upload_dir) && !mkdir($upload_dir, 0777, true)) {
                     throw new Exception('Failed to prepare upload directory.');
