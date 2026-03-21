@@ -275,6 +275,21 @@ try {
         throw new Exception('Email is already registered in this branch/company.');
     }
 
+    // Enforce max_clients limit
+    $plan_stmt = $pdo->prepare('SELECT max_clients FROM tenants WHERE tenant_id = ? LIMIT 1');
+    $plan_stmt->execute([$tenant_id]);
+    $max_clients = (int) $plan_stmt->fetchColumn();
+
+    if ($max_clients > 0) {
+        $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM clients WHERE tenant_id = ? AND client_status = 'Active'");
+        $count_stmt->execute([$tenant_id]);
+        $current_clients = (int) $count_stmt->fetchColumn();
+
+        if ($current_clients >= $max_clients) {
+            throw new Exception('Your organization has reached the maximum number of active clients allowed by your subscription plan. Please upgrade to add more clients.');
+        }
+    }
+
     $role_stmt = $pdo->prepare("SELECT role_id FROM user_roles WHERE role_name = 'Client' AND tenant_id = ? LIMIT 1");
     $role_stmt->execute([$tenant_id]);
     $role_id = (int) $role_stmt->fetchColumn();

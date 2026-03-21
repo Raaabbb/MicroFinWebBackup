@@ -21,6 +21,20 @@ try {
         // ============================================================
         case 'dashboard':
             $data = [];
+            $date_from = $_GET['date_from'] ?? date('Y-m-d', strtotime('-7 days'));
+            $date_to = $_GET['date_to'] ?? date('Y-m-d');
+
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$date_from)) {
+                $date_from = date('Y-m-d', strtotime('-7 days'));
+            }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$date_to)) {
+                $date_to = date('Y-m-d');
+            }
+            if ($date_from > $date_to) {
+                $tmp = $date_from;
+                $date_from = $date_to;
+                $date_to = $tmp;
+            }
 
             // Stat cards
             $stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE status = 'Active' AND deleted_at IS NULL");
@@ -41,14 +55,62 @@ try {
             $stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE status IN ('Pending', 'Contacted') AND deleted_at IS NULL");
             $data['pending_applications'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
 
-            // Chart: User growth (last 12 months)
-            $stmt = $pdo->query("
-                SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, COUNT(*) AS count
-                FROM users WHERE deleted_at IS NULL
-                GROUP BY month ORDER BY month ASC
-                LIMIT 12
+            // Chart: User growth by tenant (daily line series)
+            $labels = [];
+            $cursor = strtotime($date_from);
+            $end = strtotime($date_to);
+            while ($cursor <= $end) {
+                $labels[] = date('Y-m-d', $cursor);
+                $cursor = strtotime('+1 day', $cursor);
+            }
+
+            $labelIndexMap = [];
+            foreach ($labels as $idx => $label) {
+                $labelIndexMap[$label] = $idx;
+            }
+
+            $stmt = $pdo->prepare("
+                SELECT
+                    t.tenant_id,
+                    t.tenant_name,
+                    DATE(u.created_at) AS day_label,
+                    COUNT(u.user_id) AS total_users
+                FROM users u
+                INNER JOIN tenants t ON t.tenant_id = u.tenant_id
+                WHERE u.deleted_at IS NULL
+                  AND u.user_type IN ('Client', 'Employee', 'Admin')
+                  AND DATE(u.created_at) BETWEEN ? AND ?
+                  AND t.deleted_at IS NULL
+                  AND t.status = 'Active'
+                  AND (t.request_type = 'tenant_application' OR t.request_type IS NULL)
+                GROUP BY t.tenant_id, t.tenant_name, DATE(u.created_at)
+                ORDER BY t.tenant_name ASC, day_label ASC
             ");
-            $data['user_growth_chart'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt->execute([$date_from, $date_to]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $series = [];
+            foreach ($rows as $row) {
+                $tenantKey = (string)$row['tenant_id'];
+                if (!isset($series[$tenantKey])) {
+                    $series[$tenantKey] = [
+                        'tenant_name' => (string)$row['tenant_name'],
+                        'points' => array_fill(0, count($labels), 0),
+                    ];
+                }
+
+                $dayLabel = (string)$row['day_label'];
+                if (isset($labelIndexMap[$dayLabel])) {
+                    $series[$tenantKey]['points'][(int)$labelIndexMap[$dayLabel]] = (int)$row['total_users'];
+                }
+            }
+
+            $data['user_growth_chart'] = [
+                'labels' => $labels,
+                'series' => array_values($series),
+            ];
+            $data['user_growth_date_from'] = $date_from;
+            $data['user_growth_date_to'] = $date_to;
 
             // Chart: Tenant activity by status (precise monthly breakdown)
             $stmt = $pdo->query("
@@ -58,6 +120,7 @@ try {
                     SUM(CASE WHEN status NOT IN ('Active', 'Draft', 'CONSIDER', 'Pending', 'Contacted', 'Accepted', 'Rejected') THEN 1 ELSE 0 END) AS inactive_count
                 FROM tenants
                 WHERE deleted_at IS NULL
+                  AND (request_type = 'tenant_application' OR request_type IS NULL)
                 GROUP BY month ORDER BY month ASC
                 LIMIT 12
             ");
@@ -94,6 +157,7 @@ try {
                     END AS status_legend
                 FROM tenants t
                 WHERE t.deleted_at IS NULL
+                                    AND (t.request_type = 'tenant_application' OR t.request_type IS NULL)
                   AND t.created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
                   AND t.status NOT IN ('Draft', 'CONSIDER', 'Pending', 'Contacted', 'Accepted', 'Rejected')
             ";
@@ -115,8 +179,17 @@ try {
         // ============================================================
         case 'sales':
             $period = $_GET['period'] ?? 'monthly';
-            $date_from = $_GET['date_from'] ?? date('Y-m-01');
-            $date_to = $_GET['date_to'] ?? date('Y-m-d');
+            
+            // Auto-calculate date range based on period since filter UI was removed
+            if ($period === 'yearly') {
+                $date_from = date('Y-01-01', strtotime('-4 years')); // Last 5 years including current
+                $date_to = date('Y-12-31');
+            } else {
+                // monthly
+                $date_from = date('Y-m-01', strtotime('-11 months')); // Last 12 months including current
+                $date_to = date('Y-m-t');
+            }
+            
             $data = [];
 
             // Total revenue
@@ -153,9 +226,10 @@ try {
             $data['top_tenants'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Revenue chart by period
-            $date_format = '%Y-%m';
-            if ($period === 'daily') $date_format = '%Y-%m-%d';
-            elseif ($period === 'weekly') $date_format = '%x-W%v';
+            $date_format = '%Y-%m'; // monthly
+            if ($period === 'yearly') {
+                $date_format = '%Y';
+            }
 
             $stmt = $pdo->prepare("
                 SELECT DATE_FORMAT(payment_date, ?) AS period_label,
@@ -202,7 +276,7 @@ try {
                 FROM audit_logs al
                 LEFT JOIN users u ON al.user_id = u.user_id
                 LEFT JOIN tenants t ON al.tenant_id = t.tenant_id
-                WHERE al.action_type IN ('WEBSITE_SETUP', 'LOAN_PRODUCT_SETUP', 'CREDIT_CONFIG_SETUP', 'BRANDING_SETUP', 'BILLING_SETUP', 'TENANT_PROVISIONED', 'SETUP_COMPLETED', 'TENANT_STATUS_CHANGE', 'TENANT_REJECTED', 'TENANT_SLUG_UPDATED', 'DATA_MIGRATION_REQUIRED', 'SUBSCRIPTION_UPDATED', 'BILLING_PAID')
+                  WHERE u.user_type = 'Super Admin'
             ";
             $params = [];
 

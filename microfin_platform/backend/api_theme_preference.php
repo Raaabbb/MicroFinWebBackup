@@ -24,11 +24,19 @@ if (!in_array($theme, ['light', 'dark'], true)) {
 }
 
 $user_id = 0;
-if (!empty($_SESSION['user_logged_in']) && !empty($_SESSION['user_id'])) {
-    $user_id = (int)$_SESSION['user_id'];
-} elseif (!empty($_SESSION['super_admin_logged_in']) && !empty($_SESSION['super_admin_id'])) {
+$role_context = strtolower(trim((string)($payload['role'] ?? '')));
+
+if ($role_context === 'super_admin' && !empty($_SESSION['super_admin_logged_in']) && !empty($_SESSION['super_admin_id'])) {
     $user_id = (int)$_SESSION['super_admin_id'];
-}
+} elseif ($role_context === 'tenant' && !empty($_SESSION['user_logged_in']) && !empty($_SESSION['user_id'])) {
+    $user_id = (int)$_SESSION['user_id'];
+} else {
+    // Fallback: Check which one seems to have initiated the request, or just pick what's available
+    if (!empty($_SESSION['user_logged_in']) && !empty($_SESSION['user_id'])) {      
+        $user_id = (int)$_SESSION['user_id'];
+    } elseif (!empty($_SESSION['super_admin_logged_in']) && !empty($_SESSION['super_admin_id'])) {
+        $user_id = (int)$_SESSION['super_admin_id'];
+    }
 
 if ($user_id <= 0) {
     http_response_code(401);
@@ -46,4 +54,5 @@ try {
 } catch (PDOException $ex) {
     http_response_code(500);
     echo json_encode(['status' => 'error', 'message' => 'Failed to save theme preference']);
+}
 }

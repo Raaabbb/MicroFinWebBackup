@@ -2,9 +2,20 @@
 session_start();
 require_once '../backend/db_connect.php';
 require_once '../backend/tenant_identity.php';
+require_once '../vendor/PHPMailer/src/Exception.php';
+require_once '../vendor/PHPMailer/src/PHPMailer.php';
+require_once '../vendor/PHPMailer/src/SMTP.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 $form_success = false;
 $form_error = '';
+
+$talk_mode_values = ['talk-to-staff', 'talk-to-an-expert', 'talk-to-expert'];
+$requested_mode = strtolower(trim((string)($_GET['mode'] ?? $_POST['flow_mode'] ?? '')));
+$is_talk_to_expert = in_array($requested_mode, $talk_mode_values, true);
+$request_type = $is_talk_to_expert ? 'talk_to_expert' : 'tenant_application';
 
 function demo_column_exists(PDO $pdo, $table, $column)
 {
@@ -31,6 +42,56 @@ function demo_generate_username_base($preferredLastName, $fallbackInstitutionNam
     return $base !== '' ? $base : 'tenantadmin';
 }
 
+function demo_send_acknowledgement_email($toEmail, $institutionName, $isTalkToExpert)
+{
+    if (!defined('SMTP_USER') || !defined('SMTP_PASS') || trim((string)$toEmail) === '') {
+        return;
+    }
+
+    $subject = $isTalkToExpert
+        ? 'MicroFin Inquiry Received'
+        : 'MicroFin Application Received';
+
+    if ($isTalkToExpert) {
+        $body = "
+            <html>
+            <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;'>
+                <h2 style='margin-bottom: 8px;'>MicroFin</h2>
+                <p>Thank you for your inquiry.</p>
+                <p>Please wait as our staff will email you shortly.</p>
+            </body>
+            </html>
+        ";
+    } else {
+        $body = "
+            <html>
+            <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;'>
+                <h2 style='margin-bottom: 8px;'>MicroFin</h2>
+                <p>Thank you for applying to MicroFin. We have received your application.</p>
+                <p><strong>Institution:</strong> " . htmlspecialchars((string)$institutionName, ENT_QUOTES, 'UTF-8') . "</p>
+                <p>Please wait for our team response while we review your application.</p>
+                <p>Regards,<br>MicroFin Team</p>
+            </body>
+            </html>
+        ";
+    }
+
+    $mail = new PHPMailer(true);
+    $mail->isSMTP();
+    $mail->Host = 'smtp.gmail.com';
+    $mail->SMTPAuth = true;
+    $mail->Username = SMTP_USER;
+    $mail->Password = SMTP_PASS;
+    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+    $mail->Port = 587;
+    $mail->setFrom('microfin.statements@gmail.com', 'MicroFin Team');
+    $mail->addAddress($toEmail);
+    $mail->isHTML(true);
+    $mail->Subject = $subject;
+    $mail->Body = $body;
+    $mail->send();
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'request_demo') {
     $institution_name = trim($_POST['institution_name'] ?? '');
     $contact_first_name = trim($_POST['contact_first_name'] ?? '');
@@ -38,17 +99,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $contact_mi = trim($_POST['contact_mi'] ?? '');
     $contact_suffix = trim($_POST['contact_suffix'] ?? '');
     $contact_number = trim($_POST['contact_number'] ?? '');
-    $location = trim($_POST['location'] ?? '');
+    $company_address = trim($_POST['location'] ?? '');
+    $location = $company_address;
     $plan_tier = trim($_POST['plan_tier'] ?? '');
     $company_email = trim($_POST['company_email'] ?? '');
     $demo_schedule_date = trim($_POST['demo_schedule_date'] ?? '');
     $demo_schedule_date = $demo_schedule_date === '' ? date('Y-m-d H:i:s') : $demo_schedule_date;
-    $uploaded_files = $_FILES['legitimacy_documents'] ?? null;
+    $uploaded_files = [];
+    // Primary upload flow: fixed slots legitimacy_document_1..5
+    for ($slot = 1; $slot <= 5; $slot++) {
+        $field = 'legitimacy_document_' . $slot;
+        if (!isset($_FILES[$field])) {
+            continue;
+        }
+        $uploaded_files[] = [
+            'name' => $_FILES[$field]['name'] ?? '',
+            'tmp_name' => $_FILES[$field]['tmp_name'] ?? '',
+            'error' => $_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE,
+        ];
+    }
+
+    // Backward compatibility: old multi-upload field legitimacy_documents[]
+    if (count($uploaded_files) === 0 && isset($_FILES['legitimacy_documents']) && isset($_FILES['legitimacy_documents']['name']) && is_array($_FILES['legitimacy_documents']['name'])) {
+        foreach ($_FILES['legitimacy_documents']['name'] as $idx => $legacy_name) {
+            $uploaded_files[] = [
+                'name' => $legacy_name,
+                'tmp_name' => $_FILES['legitimacy_documents']['tmp_name'][$idx] ?? '',
+                'error' => $_FILES['legitimacy_documents']['error'][$idx] ?? UPLOAD_ERR_NO_FILE,
+            ];
+        }
+    }
+
+    if ($is_talk_to_expert && $plan_tier === '') {
+        // Preserve existing tenant insertion constraints without asking for plan in talk-to-expert mode.
+        $plan_tier = 'Starter';
+    }
 
     $document_count = 0;
-    if (is_array($uploaded_files) && isset($uploaded_files['name']) && is_array($uploaded_files['name'])) {
-        foreach ($uploaded_files['name'] as $idx => $name) {
-            if (($uploaded_files['error'][$idx] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+    if (is_array($uploaded_files)) {
+        foreach ($uploaded_files as $file) {
+            if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
                 $document_count++;
             }
         }
@@ -59,14 +149,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $is_otp_verified = true;
     }
 
-    if ($institution_name === '' || $company_email === '' || $plan_tier === '') {
-        $form_error = 'Institution Name, Work Email, and Subscription Plan are required.';
-    } elseif ($document_count < 1 || $document_count > 5) {
+    if ($institution_name === '' || $company_email === '' || (!$is_talk_to_expert && $plan_tier === '')) {
+        $form_error = $is_talk_to_expert
+            ? 'Institution Name and Work Email are required.'
+            : 'Institution Name, Work Email, and Subscription Plan are required.';
+    } elseif (!$is_talk_to_expert && ($document_count < 1 || $document_count > 5)) {
         $form_error = 'Please upload 1 to 5 proof of legitimacy documents.';
     } elseif (!$is_otp_verified) {
         $form_error = 'Email has not been verified. Please complete OTP verification.';
     } else {
-        $check_stmt = $pdo->prepare("SELECT COUNT(*) FROM tenants WHERE email = ?");
+        $check_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = ? AND deleted_at IS NULL");
         $check_stmt->execute([$company_email]);
         $duplicate_count = $check_stmt->fetchColumn();
 
@@ -100,33 +192,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $pdo->beginTransaction();
 
                 $tenant_id = mf_generate_tenant_id($pdo, 10);
+                $request_status = 'Pending';
+                $has_request_type = demo_column_exists($pdo, 'tenants', 'request_type');
+                $has_company_address = demo_column_exists($pdo, 'tenants', 'company_address');
 
                     $has_demo_schedule_date = demo_column_exists($pdo, 'tenants', 'demo_schedule_date');
-                    if ($has_demo_schedule_date) {
+                    if ($has_demo_schedule_date && $has_request_type && $has_company_address) {
                         $stmt = $pdo->prepare("
                             INSERT INTO tenants (
-                                tenant_id, tenant_name, first_name, last_name,
-                                mi, suffix, branch_name, plan_tier,
-                                email, demo_schedule_date, mrr, max_clients, max_users, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+                                tenant_id, tenant_name, company_address, plan_tier,
+                                demo_schedule_date, request_type, mrr,
+                                max_clients, max_users, status
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ");
                         $stmt->execute([
-                            $tenant_id, $institution_name, null, null,
-                            null, null, $location, $plan_tier,
-                            $company_email, $demo_schedule_date, $mrr, $max_c, $max_u
+                            $tenant_id, $institution_name, $company_address, $plan_tier,
+                            $demo_schedule_date, $request_type, $mrr, $max_c, $max_u, $request_status
+                        ]);
+                    } elseif ($has_demo_schedule_date && $has_company_address) {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO tenants (
+                                tenant_id, tenant_name, company_address, plan_tier,
+                                demo_schedule_date, mrr, max_clients, max_users, status
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ");
+                        $stmt->execute([
+                            $tenant_id, $institution_name, $company_address, $plan_tier,
+                            $demo_schedule_date, $mrr, $max_c, $max_u, $request_status
+                        ]);
+                    } elseif ($has_request_type && $has_company_address) {
+                        $stmt = $pdo->prepare(" 
+                            INSERT INTO tenants (
+                                tenant_id, tenant_name, company_address, plan_tier,
+                                request_type, mrr, max_clients, max_users, status
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ");
+                        $stmt->execute([
+                            $tenant_id, $institution_name, $company_address, $plan_tier,
+                            $request_type, $mrr, $max_c, $max_u, $request_status
+                        ]);
+                    } elseif ($has_company_address) {
+                        $stmt = $pdo->prepare(" 
+                            INSERT INTO tenants (
+                                tenant_id, tenant_name, company_address, plan_tier,
+                                mrr, max_clients, max_users, status
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ");
+                        $stmt->execute([
+                            $tenant_id, $institution_name, $company_address, $plan_tier,
+                            $mrr, $max_c, $max_u, $request_status
                         ]);
                     } else {
-                        $stmt = $pdo->prepare("
+                        $stmt = $pdo->prepare(" 
                             INSERT INTO tenants (
                                 tenant_id, tenant_name, first_name, last_name,
                                 mi, suffix, branch_name, plan_tier,
                                 email, mrr, max_clients, max_users, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ");
                         $stmt->execute([
                             $tenant_id, $institution_name, null, null,
                             null, null, $location, $plan_tier,
-                            $company_email, $mrr, $max_c, $max_u
+                            $company_email, $mrr, $max_c, $max_u, $request_status
                         ]);
                     }
 
@@ -149,8 +276,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                 $temp_password = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'), 0, 12);
                 $password_hash = password_hash($temp_password, PASSWORD_DEFAULT);
+                $user_type = $is_talk_to_expert ? 'inquirer' : 'applicant';
 
-                $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, ?, TRUE, ?, 'Employee', 'Inactive', ?, ?, ?, ?)");
+                $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, 'Inactive', ?, ?, ?, ?)");
                 $user_insert_stmt->execute([
                     $tenant_id,
                     $username,
@@ -158,6 +286,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $contact_number !== '' ? $contact_number : null,
                     $password_hash,
                     $admin_role_id,
+                    $user_type,
                     $contact_first_name !== '' ? $contact_first_name : null,
                     $contact_last_name !== '' ? $contact_last_name : null,
                     $contact_mi !== '' ? $contact_mi : null,
@@ -173,34 +302,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     "INSERT INTO tenant_legitimacy_documents (tenant_id, original_file_name, file_path) VALUES (?, ?, ?)"
                 );
 
-                $file_sequence = 1;
-                foreach ($uploaded_files['name'] as $idx => $original_name) {
-                    $error_code = $uploaded_files['error'][$idx] ?? UPLOAD_ERR_NO_FILE;
-                    if ($error_code === UPLOAD_ERR_NO_FILE) {
-                        continue;
-                    }
+                if (!$is_talk_to_expert && is_array($uploaded_files)) {
+                    $file_sequence = 1;
+                    foreach ($uploaded_files as $file) {
+                        $original_name = $file['name'] ?? '';
+                        $error_code = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+                        if ($error_code === UPLOAD_ERR_NO_FILE) {
+                            continue;
+                        }
 
-                    if ($error_code !== UPLOAD_ERR_OK) {
-                        throw new Exception('One of the uploaded files failed to upload.');
-                    }
+                        if ($error_code !== UPLOAD_ERR_OK) {
+                            throw new Exception('One of the uploaded files failed to upload.');
+                        }
 
-                    $extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
-                    if (!in_array($extension, $allowed_extensions, true)) {
-                        throw new Exception('Unsupported file type detected in uploads.');
-                    }
+                        $extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+                        if (!in_array($extension, $allowed_extensions, true)) {
+                            throw new Exception('Unsupported file type detected in uploads.');
+                        }
 
-                    $stored_name = $tenant_id . '_doc_' . $file_sequence . '_' . time() . '_' . bin2hex(random_bytes(2)) . '.' . $extension;
-                    $target_path = $upload_dir . $stored_name;
-                    if (!move_uploaded_file($uploaded_files['tmp_name'][$idx], $target_path)) {
-                        throw new Exception('Unable to save one of the uploaded documents.');
-                    }
+                        $stored_name = $tenant_id . '_doc_' . $file_sequence . '_' . time() . '_' . bin2hex(random_bytes(2)) . '.' . $extension;
+                        $target_path = $upload_dir . $stored_name;
+                        if (!move_uploaded_file((string)($file['tmp_name'] ?? ''), $target_path)) {
+                            throw new Exception('Unable to save one of the uploaded documents.');
+                        }
 
-                    $relative_path = '../uploads/business_permits/' . $stored_name;
-                    $doc_stmt->execute([$tenant_id, $original_name, $relative_path]);
-                    $file_sequence++;
+                        $relative_path = '../uploads/business_permits/' . $stored_name;
+                        $doc_stmt->execute([$tenant_id, $original_name, $relative_path]);
+                        $file_sequence++;
+                    }
                 }
 
                 $pdo->commit();
+
+                // Send acknowledgement email after successful save (best-effort only).
+                try {
+                    demo_send_acknowledgement_email($company_email, $institution_name, $is_talk_to_expert);
+                } catch (Throwable $mailError) {
+                    error_log('Demo acknowledgement email failed: ' . $mailError->getMessage());
+                }
 
                 $form_success = true;
                 unset($_SESSION['verified_contact_email']);
@@ -220,8 +359,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contact Us | MicroFin</title>
-    <meta name="description" content="Contact MicroFin, the cloud banking platform built for Microfinance Institutions. Fill out the form and our team will be in touch.">
+    <title><?php echo $is_talk_to_expert ? 'Talk to an Expert' : 'Apply Now'; ?> | MicroFin</title>
+    <meta name="description" content="<?php echo $is_talk_to_expert ? 'Talk to a MicroFin expert and get guidance tailored to your institution.' : 'Apply to MicroFin, the cloud banking platform built for Microfinance Institutions. Fill out the form and our team will be in touch.'; ?>">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -765,10 +904,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 </div>
                 <span class="intro-badge">
                     <span class="material-symbols-rounded" style="font-size: 15px;">rocket_launch</span>
-                    Get Started
+                    <?php echo $is_talk_to_expert ? 'Expert Guidance' : 'Get Started'; ?>
                 </span>
-                <h1 class="intro-title">Bring your institution online with confidence.</h1>
-                <p class="intro-sub">Complete this quick onboarding request and our team will start provisioning your isolated tenant environment.</p>
+                <h1 class="intro-title"><?php echo $is_talk_to_expert ? 'Talk to a specialist before you commit.' : 'Bring your institution online with confidence.'; ?></h1>
+                <p class="intro-sub"><?php echo $is_talk_to_expert ? 'Share your institution details and one of our experts will guide you through the best onboarding path.' : 'Complete this quick onboarding request and our team will start provisioning your isolated tenant environment.'; ?></p>
                 <ul class="intro-list">
                     <li><span class="material-symbols-rounded">verified_user</span><span>Dedicated tenant isolation with strict data boundaries.</span></li>
                     <li><span class="material-symbols-rounded">bolt</span><span>Rapid setup with guided onboarding and migration assistance.</span></li>
@@ -789,8 +928,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     </a>
                 </div>
             <?php else: ?>
-                <h2>Contact Us</h2>
-                <p class="subtitle">Fill out the form and our team will get back to you.</p>
+                <h2><?php echo $is_talk_to_expert ? 'Talk to an Expert' : 'Apply Now'; ?></h2>
+                <p class="subtitle"><?php echo $is_talk_to_expert ? 'Fill out the form and our team will connect you with a specialist.' : 'Fill out the form and our team will get back to you.'; ?></p>
 
                 <?php if ($form_error): ?>
                     <div class="alert-error"><?php echo htmlspecialchars($form_error); ?></div>
@@ -798,6 +937,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                 <form id="demo-form" method="POST" action="demo.php" enctype="multipart/form-data">
                     <input type="hidden" name="action" value="request_demo">
+                    <input type="hidden" name="flow_mode" value="<?php echo $is_talk_to_expert ? 'talk-to-expert' : 'apply-now'; ?>">
 
                     <div class="form-group">
                         <label>Institution Name <span class="text-danger">*</span></label>
@@ -836,6 +976,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <input type="text" class="input-field" name="location" placeholder="e.g. City, Region or Country">
                     </div>
 
+                    <?php if (!$is_talk_to_expert): ?>
                     <div class="form-group">
                         <label>Subscription Plan <span class="text-danger">*</span></label>
                         <p class="plan-helper">Select one plan to match your expected operational scale.</p>
@@ -896,6 +1037,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             </label>
                         </div>
                     </div>
+                    <?php endif; ?>
 
                     <div class="form-group">
                         <label>Business Email <span class="text-danger">*</span></label>
@@ -920,13 +1062,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <input type="hidden" name="is_otp_verified" id="is_otp_verified" value="0">
                     </div>
 
+                    <?php if (!$is_talk_to_expert): ?>
                     <div class="form-group">
                         <label>Proof of Legitimacy Documents <span class="text-danger">*</span></label>
-                        <input type="file" class="input-field" name="legitimacy_documents[]" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px;" multiple required>
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_1" id="legitimacy_document_1" data-slot="1" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px;" required>
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_2" id="legitimacy_document_2" data-slot="2" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; margin-top: 8px; display: none;">
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_3" id="legitimacy_document_3" data-slot="3" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; margin-top: 8px; display: none;">
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_4" id="legitimacy_document_4" data-slot="4" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; margin-top: 8px; display: none;">
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_5" id="legitimacy_document_5" data-slot="5" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; margin-top: 8px; display: none;">
                         <small style="color: #94a3b8; font-size: 0.8rem; margin-top: 4px; display:block;">Upload 1 to 5 files (business permit, DTI, SEC, and related proof).</small>
                     </div>
+                    <?php endif; ?>
 
-                    <button type="submit" id="btn-final-submit" class="btn btn-primary btn-block" style="opacity: 0.5; pointer-events: none;">Contact Us</button>
+                    <button type="submit" id="btn-final-submit" class="btn btn-primary btn-block" style="opacity: 0.5; pointer-events: none;"><?php echo $is_talk_to_expert ? 'Inquire' : 'Apply Now'; ?></button>
                     <small id="form-block-note" style="display: block; text-align: center; margin-top: 10px; color: #ef4444;">Verify your email to enable submission.</small>
                 </form>
             <?php endif; ?>
@@ -938,6 +1086,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     document.addEventListener('DOMContentLoaded', () => {
         const demoForm = document.getElementById('demo-form');
         if (!demoForm) return;
+
+        const legitimacyInputs = Array.from(document.querySelectorAll('.legitimacy-slot'));
+        const refreshLegitimacySlots = () => {
+            if (!legitimacyInputs.length) return;
+
+            let revealUntil = 1;
+            for (let i = 0; i < legitimacyInputs.length; i++) {
+                const current = legitimacyInputs[i];
+                const slotNumber = i + 1;
+                if (slotNumber > revealUntil) {
+                    current.style.display = 'none';
+                    current.value = '';
+                } else {
+                    current.style.display = 'block';
+                }
+
+                if (current.files && current.files.length > 0 && slotNumber === revealUntil && revealUntil < legitimacyInputs.length) {
+                    revealUntil++;
+                }
+            }
+        };
+
+        legitimacyInputs.forEach((input) => {
+            input.addEventListener('change', refreshLegitimacySlots);
+        });
+        refreshLegitimacySlots();
 
         // OTP Elements
         const btnSendOtp = document.getElementById('btn-send-otp');

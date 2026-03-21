@@ -22,12 +22,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const label = item.querySelector('span:nth-child(2)');
             if (label) pageTitle.textContent = label.textContent;
+
+            // Update URL hash without causing a page jump
+            history.replaceState(null, null, `#${targetId}`);
         });
     });
 
-    // Auto-navigate to section if ?section= or ?tab= param exists
+    // Auto-navigate to section if hash exists or ?section= or ?tab= param exists
     const urlParams = new URLSearchParams(window.location.search);
-    const targetTab = urlParams.get('section') || urlParams.get('tab');
+    const targetTab = window.location.hash
+        ? window.location.hash.substring(1)
+        : (urlParams.get('section') || urlParams.get('tab'));
     if (targetTab) {
         const targetNav = document.querySelector(`.nav-item[data-target="${targetTab}"]`);
         if (targetNav) targetNav.click();
@@ -52,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await fetch('../backend/api_theme_preference.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ theme: theme })
+                body: JSON.stringify({ theme: theme, role: 'super_admin' })
             });
         } catch (error) {
             // Ignore persistence failures and keep UI state.
@@ -168,6 +173,49 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Audit Details Modal
+    const auditModalBackdrop = document.getElementById('modal-audit-backdrop');
+    const btnCloseAuditModal = document.getElementById('close-audit-modal');
+    const btnCloseAuditModalFooter = document.getElementById('close-audit-modal-footer');
+
+    function closeAuditModal() {
+        if (auditModalBackdrop) auditModalBackdrop.classList.remove('show');
+    }
+
+    function openAuditModalFromButton(buttonEl) {
+        if (!auditModalBackdrop || !buttonEl) return;
+
+        const setValue = (id, value) => {
+            const field = document.getElementById(id);
+            if (field) field.value = value || '—';
+        };
+
+        setValue('audit-detail-created-at', formatDateTime(buttonEl.dataset.createdAt));
+        setValue('audit-detail-username', buttonEl.dataset.username || '—');
+        setValue('audit-detail-user-email', buttonEl.dataset.userEmail || 'System');
+        setValue('audit-detail-tenant-name', buttonEl.dataset.tenantName || 'Platform');
+        setValue('audit-detail-action-type', buttonEl.dataset.actionType || '—');
+        setValue('audit-detail-entity-type', buttonEl.dataset.entityType || '—');
+        setValue('audit-detail-description', buttonEl.dataset.description || '—');
+
+        auditModalBackdrop.classList.add('show');
+    }
+
+    if (btnCloseAuditModal) btnCloseAuditModal.addEventListener('click', closeAuditModal);
+    if (btnCloseAuditModalFooter) btnCloseAuditModalFooter.addEventListener('click', closeAuditModal);
+    if (auditModalBackdrop) {
+        auditModalBackdrop.addEventListener('click', (e) => {
+            if (e.target === auditModalBackdrop) closeAuditModal();
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('.audit-detail-btn');
+        if (!trigger) return;
+        e.preventDefault();
+        openAuditModalFromButton(trigger);
+    });
+
     // Bind provision buttons (from tenant table rows)
     bindProvisionButtons();
 
@@ -187,6 +235,76 @@ document.addEventListener('DOMContentLoaded', () => {
         purple: '#8b5cf6',
         purpleLight: 'rgba(139, 92, 246, 0.2)',
     };
+
+    function buildTenantPalette(count) {
+        const base = [
+            '#0284c7', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6',
+            '#f97316', '#6366f1', '#84cc16', '#ec4899', '#0ea5e9', '#22c55e'
+        ];
+        const colors = [];
+        for (let i = 0; i < count; i++) {
+            colors.push(base[i % base.length]);
+        }
+        return colors;
+    }
+
+    function toYmd(dateObj) {
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function getUserGrowthDateRange() {
+        const fromEl = document.getElementById('user-growth-date-from');
+        const toEl = document.getElementById('user-growth-date-to');
+        return {
+            dateFrom: fromEl ? fromEl.value : '',
+            dateTo: toEl ? toEl.value : ''
+        };
+    }
+
+    function setUserGrowthDateDefaults() {
+        const fromEl = document.getElementById('user-growth-date-from');
+        const toEl = document.getElementById('user-growth-date-to');
+        if (!fromEl || !toEl) return;
+
+        const today = new Date();
+        const sevenDaysBehind = new Date(today);
+        sevenDaysBehind.setDate(today.getDate() - 7);
+
+        if (!fromEl.value) fromEl.value = toYmd(sevenDaysBehind);
+        if (!toEl.value) toEl.value = toYmd(today);
+    }
+
+    function buildDashboardQueryString() {
+        const params = new URLSearchParams({ action: 'dashboard' });
+        const { dateFrom, dateTo } = getUserGrowthDateRange();
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo) params.set('date_to', dateTo);
+        return params.toString();
+    }
+
+    function buildUserGrowthDatasets(userGrowthChartData) {
+        const series = (userGrowthChartData && Array.isArray(userGrowthChartData.series)) ? userGrowthChartData.series : [];
+        const colors = buildTenantPalette(series.length);
+
+        return series.map((s, idx) => {
+            const color = colors[idx];
+            return {
+                label: s.tenant_name || `Tenant ${idx + 1}`,
+                data: Array.isArray(s.points) ? s.points.map(v => Number(v || 0)) : [],
+                borderColor: color,
+                backgroundColor: color + '33',
+                fill: true,
+                tension: 0.35,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointBackgroundColor: color,
+                borderWidth: 2
+            };
+        });
+    }
 
     function initDashboardCharts(data) {
         const userGrowthCtx = document.getElementById('chart-user-growth');
@@ -210,23 +328,54 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+        const integerTickFormatter = (value) => {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric) || !Number.isInteger(numeric)) {
+                return '';
+            }
+            return String(numeric);
+        };
+
         if (userGrowthCtx) {
+            const userGrowthLabels = (data.user_growth_chart && Array.isArray(data.user_growth_chart.labels))
+                ? data.user_growth_chart.labels
+                : [];
+            const userGrowthDatasets = buildUserGrowthDatasets(data.user_growth_chart);
             chartUserGrowth = new Chart(userGrowthCtx, {
                 type: 'line',
                 data: {
-                    labels: (data.user_growth_chart || []).map(d => d.month),
-                    datasets: [{
-                        label: 'New Users',
-                        data: (data.user_growth_chart || []).map(d => d.count),
-                        borderColor: chartColors.primary,
-                        backgroundColor: chartColors.primaryLight,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 4,
-                        pointBackgroundColor: chartColors.primary
-                    }]
+                    labels: userGrowthLabels,
+                    datasets: userGrowthDatasets
                 },
-                options: defaultOptions
+                options: {
+                    ...defaultOptions,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: { color: '#a1a1aa', font: { family: 'Outfit' } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const datasetLabel = context.dataset && context.dataset.label ? context.dataset.label + ': ' : '';
+                                    const numericValue = Number(context.parsed && context.parsed.y);
+                                    const safeValue = Number.isFinite(numericValue) ? Math.round(numericValue) : 0;
+                                    return datasetLabel + safeValue;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        ...defaultOptions.scales,
+                        y: {
+                            ...defaultOptions.scales.y,
+                            ticks: {
+                                ...defaultOptions.scales.y.ticks,
+                                callback: integerTickFormatter
+                            }
+                        }
+                    }
+                }
             });
         }
 
@@ -318,8 +467,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update charts
         if (chartUserGrowth && data.user_growth_chart) {
-            chartUserGrowth.data.labels = data.user_growth_chart.map(d => d.month);
-            chartUserGrowth.data.datasets[0].data = data.user_growth_chart.map(d => d.count);
+            chartUserGrowth.data.labels = Array.isArray(data.user_growth_chart.labels) ? data.user_growth_chart.labels : [];
+            chartUserGrowth.data.datasets = buildUserGrowthDatasets(data.user_growth_chart);
             chartUserGrowth.update('none');
         }
         if (chartTenantActivity && data.tenant_activity_chart) {
@@ -336,51 +485,144 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Initial fetch + chart init
-    fetch('api_dashboard_stats.php')
-        .then(r => r.json())
-        .then(data => {
-            initDashboardCharts(data);
+    async function loadDashboardStats(initCharts = false) {
+        try {
+            const res = await fetch('api_dashboard_stats.php?' + buildDashboardQueryString());
+            if (!res.ok) return;
+            const data = await res.json();
+
+            const fromEl = document.getElementById('user-growth-date-from');
+            const toEl = document.getElementById('user-growth-date-to');
+            if (fromEl && data.user_growth_date_from && !fromEl.value) fromEl.value = data.user_growth_date_from;
+            if (toEl && data.user_growth_date_to && !toEl.value) toEl.value = data.user_growth_date_to;
+
+            if (initCharts) {
+                initDashboardCharts(data);
+            }
             updateDashboardStats(data);
-        })
-        .catch(e => console.error('Dashboard init error:', e));
+        } catch (e) {
+            console.error('Dashboard load error:', e);
+        }
+    }
+
+    setUserGrowthDateDefaults();
+    loadDashboardStats(true);
+
+    const btnApplyUserGrowthFilter = document.getElementById('btn-apply-user-growth-filter');
+    if (btnApplyUserGrowthFilter) {
+        btnApplyUserGrowthFilter.addEventListener('click', async () => {
+            const fromEl = document.getElementById('user-growth-date-from');
+            const toEl = document.getElementById('user-growth-date-to');
+            if (!fromEl || !toEl) return;
+
+            if (fromEl.value && toEl.value && fromEl.value > toEl.value) {
+                const tmp = fromEl.value;
+                fromEl.value = toEl.value;
+                toEl.value = tmp;
+            }
+            await loadDashboardStats(false);
+        });
+    }
 
     // Poll every 5 seconds
     setInterval(async () => {
-        try {
-            const res = await fetch('api_dashboard_stats.php');
-            if (!res.ok) return;
-            const data = await res.json();
-            updateDashboardStats(data);
-        } catch (e) {
-            console.error('Polling error:', e);
-        }
+        await loadDashboardStats(false);
     }, 5000);
 
     // ============================================================
     // TENANT MANAGEMENT: Filter + Search
     // ============================================================
     const tenantStatusFilter = document.getElementById('tenant-status-filter');
+    const applicationStatusFilter = document.getElementById('application-status-filter');
+    const inquiryStatusFilter = document.getElementById('inquiry-status-filter');
     const tenantSearch = document.getElementById('tenant-search');
     const tenantsTable = document.getElementById('tenants-table');
+    const tenantIntakeTabs = document.querySelectorAll('.tenant-intake-tab');
+    let activeTenantView = document.querySelector('.tenant-intake-tab.active')?.getAttribute('data-view') || 'tenants';
+
+    function normalizeInquiryStatus(rowStatus, rowRequestType) {
+        const rawStatus = String(rowStatus || '').toLowerCase();
+        const requestType = String(rowRequestType || '').toLowerCase();
+
+        if (requestType === 'talk_to_expert') {
+            if (rawStatus === 'pending') return 'new';
+            if (rawStatus === 'contacted') return 'in_contact';
+            if (rawStatus === 'new') return 'new';
+            if (rawStatus === 'in contact') return 'in_contact';
+            return 'closed';
+        }
+
+        if (rawStatus === 'active') return 'active';
+        if (rawStatus === 'suspended') return 'suspended';
+        if (rawStatus === 'rejected') return 'rejected';
+        return 'pending';
+    }
+
+    function updateTenantManagementFilterVisibility() {
+        activeTenantView = document.querySelector('.tenant-intake-tab.active')?.getAttribute('data-view') || activeTenantView;
+
+        if (activeTenantView === 'inquiries') {
+            if (tenantStatusFilter) tenantStatusFilter.style.display = 'none';
+            if (applicationStatusFilter) applicationStatusFilter.style.display = 'none';
+            if (inquiryStatusFilter) inquiryStatusFilter.style.display = '';
+        } else if (activeTenantView === 'applications') {
+            if (tenantStatusFilter) tenantStatusFilter.style.display = 'none';
+            if (applicationStatusFilter) applicationStatusFilter.style.display = '';
+            if (inquiryStatusFilter) inquiryStatusFilter.style.display = 'none';
+        } else {
+            if (tenantStatusFilter) tenantStatusFilter.style.display = '';
+            if (applicationStatusFilter) applicationStatusFilter.style.display = 'none';
+            if (inquiryStatusFilter) inquiryStatusFilter.style.display = 'none';
+        }
+    }
+
+    tenantIntakeTabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+            tenantIntakeTabs.forEach((t) => t.classList.remove('active'));
+            tab.classList.add('active');
+            activeTenantView = tab.getAttribute('data-view') || 'all';
+            updateTenantManagementFilterVisibility();
+            filterTenantTable();
+        });
+    });
 
     function filterTenantTable() {
         if (!tenantsTable) return;
-        const status = tenantStatusFilter ? tenantStatusFilter.value : 'all';
+        const status = (activeTenantView === 'inquiries' && inquiryStatusFilter)
+            ? inquiryStatusFilter.value
+            : (activeTenantView === 'applications' && applicationStatusFilter)
+                ? applicationStatusFilter.value
+                : (tenantStatusFilter ? tenantStatusFilter.value : 'all');
         const search = tenantSearch ? tenantSearch.value.toLowerCase() : '';
         const rows = tenantsTable.querySelectorAll('tbody tr[data-status]');
 
         rows.forEach(row => {
             const rowStatus = row.getAttribute('data-status');
+            const rowRequestType = row.getAttribute('data-request-type') || 'tenant_application';
+            const normalizedStatus = normalizeInquiryStatus(rowStatus, rowRequestType);
             const rowText = row.textContent.toLowerCase();
-            const statusMatch = status === 'all' || rowStatus === status;
+            const statusMatch = status === 'all' || normalizedStatus === status;
+            const isApplication = rowRequestType === 'tenant_application' && (normalizedStatus === 'pending' || normalizedStatus === 'rejected');
+            const isTenant = rowRequestType === 'tenant_application' && (normalizedStatus === 'active' || normalizedStatus === 'suspended');
+            const isInquiry = rowRequestType === 'talk_to_expert';
+
+            let viewMatch = false;
+            if (activeTenantView === 'all') viewMatch = true;
+            if (activeTenantView === 'tenants') viewMatch = isTenant;
+            if (activeTenantView === 'applications') viewMatch = isApplication;
+            if (activeTenantView === 'inquiries') viewMatch = isInquiry;
+
             const searchMatch = search === '' || rowText.includes(search);
-            row.style.display = statusMatch && searchMatch ? '' : 'none';
+            row.style.display = statusMatch && viewMatch && searchMatch ? '' : 'none';
         });
     }
 
     if (tenantStatusFilter) tenantStatusFilter.addEventListener('change', filterTenantTable);
+    if (applicationStatusFilter) applicationStatusFilter.addEventListener('change', filterTenantTable);
+    if (inquiryStatusFilter) inquiryStatusFilter.addEventListener('change', filterTenantTable);
     if (tenantSearch) tenantSearch.addEventListener('input', filterTenantTable);
+    updateTenantManagementFilterVisibility();
+    filterTenantTable();
 
     // ============================================================
     // REPORTS: Load via AJAX
@@ -429,33 +671,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // SALES REPORT: Load via AJAX
     // ============================================================
     let chartRevenue = null;
-    const btnApplySalesFilter = document.getElementById('btn-apply-sales-filter');
+    const revenuePeriodFilter = document.getElementById('revenue-period-filter');
+    
+    function loadSalesData() {
+        const period = revenuePeriodFilter ? revenuePeriodFilter.value : 'monthly';
+        const params = new URLSearchParams({ action: 'sales', period: period });
 
-    if (btnApplySalesFilter) {
-        btnApplySalesFilter.addEventListener('click', () => {
-            const period = document.getElementById('sales-period').value;
-            const dateFrom = document.getElementById('sales-date-from').value;
-            const dateTo = document.getElementById('sales-date-to').value;
+        fetch('api_dashboard_stats.php?' + params.toString())
+            .then(r => r.json())
+            .then(data => renderSalesReport(data))
+            .catch(e => console.error('Sales error:', e));
+    }
 
-            const params = new URLSearchParams({ action: 'sales' });
-            if (period) params.set('period', period);
-            if (dateFrom) params.set('date_from', dateFrom);
-            if (dateTo) params.set('date_to', dateTo);
-
-            fetch('api_dashboard_stats.php?' + params.toString())
-                .then(r => r.json())
-                .then(data => renderSalesReport(data))
-                .catch(e => console.error('Sales error:', e));
-        });
+    if (document.getElementById('sales')) {
+        // Load initially
+        loadSalesData();
+        
+        // Reload when filter changes
+        if (revenuePeriodFilter) {
+            revenuePeriodFilter.addEventListener('change', loadSalesData);
+        }
     }
 
     function renderSalesReport(data) {
-        // Summary cards
-        const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
-            el('sales-total-revenue', '₱' + data.total_revenue);
-        el('sales-total-transactions', data.total_transactions);
-            el('sales-avg-transaction', '₱' + data.avg_transaction);
-
         // Top tenants table
         const topTbody = document.querySelector('#top-tenants-table tbody');
         if (topTbody) {
@@ -565,7 +803,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${esc(log.tenant_name || 'Platform')}</td>
                 <td><span class="badge badge-blue">${esc(log.action_type)}</span></td>
                 <td>${esc(log.entity_type || '—')}</td>
-                <td style="white-space: normal; min-width: 250px;">${esc(log.description || '—')}</td>
+                <td>
+                    <button
+                        type="button"
+                        class="btn btn-outline btn-sm audit-detail-btn"
+                        data-created-at="${esc(log.created_at || '')}"
+                        data-username="${esc(log.username || '—')}"
+                        data-user-email="${esc(log.user_email || 'System')}"
+                        data-tenant-name="${esc(log.tenant_name || 'Platform')}"
+                        data-action-type="${esc(log.action_type || '—')}"
+                        data-entity-type="${esc(log.entity_type || '—')}"
+                        data-description="${esc(log.description || '—')}"
+                    >
+                        <span class="material-symbols-rounded" style="font-size:16px;">visibility</span> View
+                    </button>
+                </td>
             </tr>
         `).join('');
     }
@@ -601,13 +853,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tenantName = btn.getAttribute('data-tenant-name');
                 const companyEmail = btn.getAttribute('data-company-email');
                 let planTier = btn.getAttribute('data-plan-tier');
+                const requestType = btn.getAttribute('data-request-type') || 'tenant_application';
                 if (!planTier || planTier === '') planTier = 'Starter';
                 const firstName = btn.getAttribute('data-first-name') || '';
                 const lastName = btn.getAttribute('data-last-name') || '';
                 const mi = btn.getAttribute('data-mi') || '';
                 const suffix = btn.getAttribute('data-suffix') || '';
-                const branchName = btn.getAttribute('data-branch-name') || '';
-                const contactNumber = btn.getAttribute('data-contact-number') || '';
+                const companyAddress = btn.getAttribute('data-company-address') || '';
 
                 if (modalForm) {
                     // Make fields read-only for demo provision
@@ -626,16 +878,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     const nameInput = modalForm.querySelector('input[name="tenant_name"]');
                     const emailInput = modalForm.querySelector('input[name="admin_email"]');
                     const slugInput = modalForm.querySelector('input[name="custom_slug"]');
+                    const requestTypeInput = modalForm.querySelector('input[name="request_type"]');
                     const planSelect = modalForm.querySelector('select[name="plan_tier"]');
                     const firstNameInput = modalForm.querySelector('input[name="first_name"]');
                     const lastNameInput = modalForm.querySelector('input[name="last_name"]');
                     const miInput = modalForm.querySelector('input[name="mi"]');
                     const suffixSelect = modalForm.querySelector('select[name="suffix"]');
-                    const branchInput = modalForm.querySelector('input[name="branch_name"]');
-                    const contactInput = modalForm.querySelector('input[name="contact_number"]');
+                    const companyAddressInput = modalForm.querySelector('input[name="company_address"]');
 
                     if (nameInput) nameInput.value = tenantName;
                     if (emailInput) emailInput.value = companyEmail;
+                    if (requestTypeInput) requestTypeInput.value = requestType;
                     if (slugInput) {
                         slugInput.value = tenantName.toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
                         delete slugInput.dataset.manuallyEdited;
@@ -651,8 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
                     }
-                    if (branchInput) branchInput.value = branchName;
-                    if (contactInput) contactInput.value = contactNumber;
+                    if (companyAddressInput) companyAddressInput.value = companyAddress;
                     if (planSelect) {
                         for (let i = 0; i < planSelect.options.length; i++) {
                             if (planSelect.options[i].value === planTier) {

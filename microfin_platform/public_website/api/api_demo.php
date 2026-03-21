@@ -172,8 +172,8 @@ if ($action === 'send_otp') {
          $otp = sprintf("%06d", mt_rand(1, 999999));
 
          try {
-             // Check if email already has a demo request
-             $check_stmt = $pdo->prepare("SELECT COUNT(*) FROM tenants WHERE email = ?");
+             // Check if email already exists under admin/super-admin accounts in users
+             $check_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = ? AND deleted_at IS NULL");
              $check_stmt->execute([$email]);
              $duplicate_count = $check_stmt->fetchColumn();
 
@@ -188,12 +188,12 @@ if ($action === 'send_otp') {
                  $stmt = $pdo->prepare("INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))");
                  if ($stmt->execute([$email, $otp])) {
                      // Build OTP email HTML
-                     $subject = 'MicroFin - Your Verification Code';
+                            $subject = 'MicroFin - Your OTP Code';
                      $message = "
                      <html>
                      <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
-                        <h2>MicroFin Demo Verification</h2>
-                        <p>Your one-time verification code is:</p>
+                                <h2>MicroFin OTP</h2>
+                                <p>This is your OTP:</p>
                         <h1 style='color: #10b981; letter-spacing: 5px;'>{$otp}</h1>
                         <p>This code will expire in 5 minutes.</p>
                      </body>

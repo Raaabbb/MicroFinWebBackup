@@ -28,6 +28,21 @@ require_once '../vendor/PHPMailer/src/SMTP.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+function sa_column_exists(PDO $pdo, $table, $column)
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+
+    $safe_column = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $column);
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE '{$safe_column}'");
+    $stmt->execute();
+    $cache[$key] = (bool) $stmt->fetch();
+    return $cache[$key];
+}
+
 $provision_success = '';
 $provision_error = '';
 
@@ -49,6 +64,27 @@ $plan_pricing_map = [
     'Unlimited' => 29999.00,
 ];
 
+try {
+    $pdo->exec("ALTER TABLE tenants ADD COLUMN request_type ENUM('tenant_application', 'talk_to_expert') NOT NULL DEFAULT 'tenant_application' AFTER status");
+} catch (Throwable $e) {
+}
+try {
+    $pdo->exec("ALTER TABLE tenants ADD COLUMN assigned_expert_user_id INT NULL AFTER request_type");
+} catch (Throwable $e) {
+}
+try {
+    $pdo->exec("ALTER TABLE tenants ADD INDEX idx_request_type_status (request_type, status)");
+} catch (Throwable $e) {
+}
+try {
+    $pdo->exec("ALTER TABLE tenants ADD INDEX idx_request_type_created_at (request_type, created_at)");
+} catch (Throwable $e) {
+}
+try {
+    $pdo->exec("ALTER TABLE tenants ADD INDEX idx_assigned_expert_user (assigned_expert_user_id)");
+} catch (Throwable $e) {
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -62,6 +98,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tenant_name = trim($_POST['tenant_name'] ?? '');
         $admin_email = trim($_POST['admin_email'] ?? '');
         $custom_slug = trim($_POST['custom_slug'] ?? '');
+        $request_type = trim((string)($_POST['request_type'] ?? 'tenant_application'));
+        if (!in_array($request_type, ['tenant_application', 'talk_to_expert'], true)) {
+            $request_type = 'tenant_application';
+        }
         $plan_tier = trim($_POST['plan_tier'] ?? 'Starter');
         if (!array_key_exists($plan_tier, $plan_pricing_map)) {
             $plan_tier = 'Starter';
@@ -80,8 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $last_name = trim($_POST['last_name'] ?? '');
         $mi = trim($_POST['mi'] ?? '');
         $suffix = trim($_POST['suffix'] ?? '');
-        $branch_name = trim($_POST['branch_name'] ?? '');
-        $contact_number = trim($_POST['contact_number'] ?? '');
+        $company_address = trim($_POST['company_address'] ?? '');
 
         $slug_source = $custom_slug !== '' ? $custom_slug : $tenant_name;
         $base_tenant_slug = mf_normalize_tenant_slug($slug_source);
@@ -101,20 +140,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $base_admin_username = 'tenantadmin';
             }
 
-            $existing_check = $pdo->prepare("SELECT tenant_id FROM tenants WHERE tenant_name = ? AND status IN ('Pending', 'Contacted') LIMIT 1");
+            $existing_check = $pdo->prepare("SELECT tenant_id, request_type FROM tenants WHERE tenant_name = ? AND status IN ('Pending', 'Contacted', 'New', 'In Contact') LIMIT 1");
             $existing_check->execute([$tenant_name]);
             $existing = $existing_check->fetch();
 
             if ($existing) {
                 $tenant_id = (string) $existing['tenant_id'];
+                $existing_request_type = (string)($existing['request_type'] ?? 'tenant_application');
                 $tenant_slug = mf_generate_unique_tenant_slug($pdo, $base_tenant_slug, $tenant_id);
-                $update = $pdo->prepare("UPDATE tenants SET tenant_slug = ?, email = ?, branch_name = ?, contact_number = ?, status = 'Active', plan_tier = ?, mrr = ?, max_clients = ?, max_users = ?, onboarding_deadline = DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE tenant_id = ?");
-            $update->execute([$tenant_slug, $admin_email, $branch_name, $contact_number, $plan_tier, $mrr, $max_c, $max_u, $tenant_id]);
+                $update = $pdo->prepare("UPDATE tenants SET tenant_slug = ?, company_address = ?, status = 'Active', plan_tier = ?, mrr = ?, max_clients = ?, max_users = ?, onboarding_deadline = DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE tenant_id = ?");
+            $update->execute([$tenant_slug, $company_address, $plan_tier, $mrr, $max_c, $max_u, $tenant_id]);
             } else {
+                $existing_request_type = $request_type;
                 $tenant_id = mf_generate_tenant_id($pdo, 10);
                 $tenant_slug = mf_generate_unique_tenant_slug($pdo, $base_tenant_slug);
-                $insert = $pdo->prepare("INSERT INTO tenants (tenant_id, tenant_name, tenant_slug, email, branch_name, contact_number, status, plan_tier, mrr, max_clients, max_users, onboarding_deadline) VALUES (?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))");
-                $insert->execute([$tenant_id, $tenant_name, $tenant_slug, $admin_email, $branch_name, $contact_number, $plan_tier, $mrr, $max_c, $max_u]);
+                $insert = $pdo->prepare("INSERT INTO tenants (tenant_id, tenant_name, tenant_slug, company_address, status, request_type, plan_tier, mrr, max_clients, max_users, onboarding_deadline) VALUES (?, ?, ?, ?, 'Active', ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))");
+                $insert->execute([$tenant_id, $tenant_name, $tenant_slug, $company_address, $request_type, $plan_tier, $mrr, $max_c, $max_u]);
             }
 
             $existing_role_stmt = $pdo->prepare("SELECT role_id FROM user_roles WHERE tenant_id = ? AND role_name = 'Admin' LIMIT 1");
@@ -146,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existing_admin_user_id = (int)$existing_admin_user_stmt->fetchColumn();
 
             if ($existing_admin_user_id > 0) {
-                $user_update = $pdo->prepare("UPDATE users SET username = ?, password_hash = ?, force_password_change = TRUE, role_id = ?, user_type = 'Employee', status = 'Active', first_name = ?, last_name = ?, middle_name = ?, suffix = ?, deleted_at = NULL WHERE user_id = ?");
+                $user_update = $pdo->prepare("UPDATE users SET username = ?, password_hash = ?, force_password_change = TRUE, role_id = ?, user_type = 'Admin', status = 'Active', first_name = ?, last_name = ?, middle_name = ?, suffix = ?, deleted_at = NULL WHERE user_id = ?");
                 $user_update->execute([
                     $admin_username,
                     $password_hash,
@@ -158,12 +199,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $existing_admin_user_id
                 ]);
             } else {
-                $user_insert = $pdo->prepare("INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, TRUE, ?, 'Employee', 'Active', ?, ?, ?, ?)");
+                $user_insert = $pdo->prepare("INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, TRUE, ?, 'Admin', 'Active', ?, ?, ?, ?)");
                 $user_insert->execute([$tenant_id, $admin_username, $admin_email, $password_hash, $new_role_id, $first_name !== '' ? $first_name : null, $last_name !== '' ? $last_name : null, $mi !== '' ? $mi : null, $suffix !== '' ? $suffix : null]);
             }
 
-            $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'TENANT_PROVISIONED', 'tenant', ?, ?)");
-            $log->execute([$_SESSION['super_admin_id'], "Provisioned tenant {$tenant_name} (ID: {$tenant_id}, Slug: {$tenant_slug}, Plan: {$plan_tier})", $tenant_id]);
+            $admin_name = (string)($_SESSION['super_admin_username'] ?? 'super_admin');
+            $provision_action_type = ($existing_request_type === 'talk_to_expert') ? 'LEAD_PROVISIONED' : 'TENANT_PROVISIONED';
+            $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, ?, 'tenant', ?, ?)");
+            $log->execute([$_SESSION['super_admin_id'], $provision_action_type, "{$admin_name} had provisioned {$tenant_name} (ID: {$tenant_id}, Slug: {$tenant_slug}, Plan: {$plan_tier})", $tenant_id]);
 
             $private_url = 'http://localhost/admin-draft/microfin_platform/tenant_login/login.php?s=' . urlencode($tenant_slug);
 
@@ -193,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                 $mail->Port       = 587;
 
-                $mail->setFrom(SMTP_USER, 'MicroFin Provisioning');
+                $mail->setFrom('microfin.statements@gmail.com', 'MicroFin Provisioning');
                 $mail->addAddress($admin_email);
 
                 $mail->isHTML(true);
@@ -210,6 +253,129 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: super_admin.php?section=tenants');
             exit;
         }
+    } elseif ($action === 'send_talk_email') {
+        $tenant_id = trim((string)($_POST['tenant_id'] ?? ''));
+        if ($tenant_id === '') {
+            $_SESSION['sa_error'] = 'Missing lead tenant ID.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $lead_stmt = $pdo->prepare("SELECT t.tenant_id, t.tenant_name, t.request_type, owner.owner_email AS email, owner.owner_first_name AS first_name, owner.owner_last_name AS last_name
+            FROM tenants t
+            LEFT JOIN (
+                SELECT u.tenant_id,
+                       SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(u.first_name, '') ORDER BY u.user_id ASC SEPARATOR '||'), '||', 1) AS owner_first_name,
+                       SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(u.last_name, '') ORDER BY u.user_id ASC SEPARATOR '||'), '||', 1) AS owner_last_name,
+                       SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(u.email, '') ORDER BY u.user_id ASC SEPARATOR '||'), '||', 1) AS owner_email
+                FROM users u
+                WHERE u.tenant_id IS NOT NULL AND u.deleted_at IS NULL
+                GROUP BY u.tenant_id
+            ) owner ON owner.tenant_id = t.tenant_id
+            WHERE t.tenant_id = ? AND t.deleted_at IS NULL LIMIT 1");
+        $lead_stmt->execute([$tenant_id]);
+        $lead = $lead_stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$lead) {
+            $_SESSION['sa_error'] = 'Lead not found.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        if (($lead['request_type'] ?? '') !== 'talk_to_expert') {
+            $_SESSION['sa_error'] = 'Email action is for Talk to an Expert leads only.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        if (empty($lead['email'])) {
+            $_SESSION['sa_error'] = 'No admin email found for this lead.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $super_admin_email_stmt = $pdo->prepare("SELECT email FROM users WHERE user_id = ? AND user_type = 'Super Admin' LIMIT 1");
+        $super_admin_email_stmt->execute([(int)($_SESSION['super_admin_id'] ?? 0)]);
+        $super_admin_email = (string)($super_admin_email_stmt->fetchColumn() ?: '');
+        if ($super_admin_email === '') {
+            $_SESSION['sa_error'] = 'Unable to determine the super admin email for this action.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $contact_name = trim(((string)($lead['first_name'] ?? '')) . ' ' . ((string)($lead['last_name'] ?? '')));
+        $contact_name = $contact_name !== '' ? $contact_name : ((string)($lead['tenant_name'] ?? 'there'));
+        $subject = 'MicroFin Consultation Follow-up for ' . (string)($lead['tenant_name'] ?? 'your institution');
+        $body = "
+            <html>
+            <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;'>
+                <p>Hi {$contact_name},</p>
+                <p>Hi from MicroFin. Thank you for your inquiry.</p>
+                <p>For additional concerns, please contact me at <a href='mailto:{$super_admin_email}'>{$super_admin_email}</a>.</p>
+                <p>Best regards,<br>MicroFin Platform Team</p>
+            </body>
+            </html>
+        ";
+
+        $mail = new PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'microfin.statements@gmail.com';
+            $mail->Password = SMTP_PASS;
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 587;
+            $mail->setFrom('microfin.statements@gmail.com', 'MicroFin Consult Team');
+            $mail->addAddress((string)$lead['email']);
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body = $body;
+            $mail->send();
+
+            $upd = $pdo->prepare("UPDATE tenants SET status = 'In Contact' WHERE tenant_id = ?");
+            $upd->execute([$tenant_id]);
+
+            $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'LEAD_EMAIL_SENT', 'tenant', ?, ?)");
+            $log->execute([$_SESSION['super_admin_id'], "Inquiry email sent to {$lead['tenant_name']} ({$lead['email']}) with contact {$super_admin_email}", $tenant_id]);
+
+            $_SESSION['sa_flash'] = 'Consultation email sent successfully via microfin.statements@gmail.com.';
+        } catch (Throwable $e) {
+            $_SESSION['sa_error'] = 'Failed to send consultation email: ' . $mail->ErrorInfo;
+        }
+
+        header('Location: super_admin.php?section=tenants');
+        exit;
+    } elseif ($action === 'close_inquiry') {
+        $tenant_id = trim((string)($_POST['tenant_id'] ?? ''));
+        if ($tenant_id === '') {
+            $_SESSION['sa_error'] = 'Missing lead tenant ID.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+        $tenant_stmt = $pdo->prepare("SELECT tenant_name, request_type FROM tenants WHERE tenant_id = ? LIMIT 1");
+        $tenant_stmt->execute([$tenant_id]);
+        $tenant_row = $tenant_stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$tenant_row) {
+            $_SESSION['sa_error'] = 'Lead not found.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+        if (($tenant_row['request_type'] ?? '') !== 'talk_to_expert') {
+            $_SESSION['sa_error'] = 'Close action is for inquiries only.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+        $tenant_name = (string)($tenant_row['tenant_name'] ?? $tenant_id);
+
+        $upd = $pdo->prepare("UPDATE tenants SET status = 'Archived' WHERE tenant_id = ?");
+        $upd->execute([$tenant_id]);
+
+        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'LEAD_CLOSED', 'tenant', ?, ?)");
+        $log->execute([$_SESSION['super_admin_id'], "Inquiry closed for {$tenant_name}", $tenant_id]);
+        $_SESSION['sa_flash'] = 'Inquiry closed.';
+        header('Location: super_admin.php?section=tenants');
+        exit;
     } elseif ($action === 'toggle_status') {
         $tenant_id = $_POST['tenant_id'] ?? '';
         $new_status = $_POST['new_status'] ?? 'Active';
@@ -329,7 +495,7 @@ $active_super_admin_accounts = (int) $stmt->fetch()['cnt'];
 $stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM users WHERE status = 'Inactive' AND deleted_at IS NULL");
 $inactive_users = (int) $stmt->fetch()['cnt'];
 
-$stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE status IN ('Pending', 'Contacted') AND deleted_at IS NULL");
+$stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE request_type = 'tenant_application' AND status = 'Pending' AND deleted_at IS NULL");
 $pending_applications = (int) $stmt->fetch()['cnt'];
 
 $stmt = $pdo->query("SELECT COALESCE(SUM(mrr), 0) AS total_mrr FROM tenants WHERE status = 'Active' AND deleted_at IS NULL");
@@ -347,12 +513,12 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS tenant_legitimacy_documents (
 
 // Tenant Management: all tenants
 $tenant_rows_stmt = $pdo->query("
-    SELECT t.tenant_id, t.tenant_name, t.tenant_slug, t.first_name, t.last_name, t.mi, t.suffix,
-        t.branch_name, t.contact_number, t.email, t.status, t.plan_tier, t.mrr, t.created_at,
+    SELECT t.tenant_id, t.tenant_name, t.tenant_slug, t.company_address, t.status, t.request_type, t.plan_tier, t.mrr, t.created_at,
         owner.owner_username,
         owner.owner_first_name,
         owner.owner_last_name,
         owner.owner_email,
+        owner.owner_phone,
            COALESCE(doc_summary.document_count, 0) AS legitimacy_document_count,
            doc_summary.document_paths AS legitimacy_document_paths
     FROM tenants t
@@ -362,10 +528,10 @@ $tenant_rows_stmt = $pdo->query("
          SUBSTRING_INDEX(GROUP_CONCAT(u.username ORDER BY u.user_id ASC SEPARATOR '||'), '||', 1) AS owner_username,
          SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(u.first_name, '') ORDER BY u.user_id ASC SEPARATOR '||'), '||', 1) AS owner_first_name,
          SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(u.last_name, '') ORDER BY u.user_id ASC SEPARATOR '||'), '||', 1) AS owner_last_name,
-         SUBSTRING_INDEX(GROUP_CONCAT(u.email ORDER BY u.user_id ASC SEPARATOR '||'), '||', 1) AS owner_email
+         SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(u.email, '') ORDER BY u.user_id ASC SEPARATOR '||'), '||', 1) AS owner_email,
+         SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(u.phone_number, '') ORDER BY u.user_id ASC SEPARATOR '||'), '||', 1) AS owner_phone
      FROM users u
-     INNER JOIN user_roles ur ON ur.role_id = u.role_id
-     WHERE u.user_type = 'Employee' AND ur.role_name = 'Admin' AND u.deleted_at IS NULL
+    WHERE u.tenant_id IS NOT NULL AND u.deleted_at IS NULL
      GROUP BY u.tenant_id
     ) owner ON owner.tenant_id = t.tenant_id
     LEFT JOIN (
@@ -380,10 +546,7 @@ $tenant_rows_stmt = $pdo->query("
 ");
 $tenant_rows = $tenant_rows_stmt->fetchAll();
 
-// Audit Logs: initial 100 + distinct action types
-$allowed_sa_actions = ['WEBSITE_SETUP', 'LOAN_PRODUCT_SETUP', 'CREDIT_CONFIG_SETUP', 'BRANDING_SETUP', 'BILLING_SETUP', 'TENANT_PROVISIONED', 'SETUP_COMPLETED', 'TENANT_STATUS_CHANGE', 'TENANT_REJECTED', 'TENANT_SLUG_UPDATED', 'DATA_MIGRATION_REQUIRED', 'SUBSCRIPTION_UPDATED', 'BILLING_PAID'];
-$sa_actions_sql = "'" . implode("','", $allowed_sa_actions) . "'";
-
+// Audit Logs: initial 100 + distinct action types (Only for Super Admins)
 $logs_stmt = $pdo->query("
     SELECT al.log_id, al.action_type, al.entity_type, al.entity_id,
            al.description, al.ip_address, al.created_at,
@@ -392,12 +555,18 @@ $logs_stmt = $pdo->query("
     FROM audit_logs al
     LEFT JOIN users u ON al.user_id = u.user_id
     LEFT JOIN tenants t ON al.tenant_id = t.tenant_id
-    WHERE al.action_type IN ($sa_actions_sql)
+    WHERE u.user_type = 'Super Admin'
     ORDER BY al.log_id DESC LIMIT 100
 ");
 $audit_logs = $logs_stmt->fetchAll();
 
-$action_types_stmt = $pdo->query("SELECT DISTINCT action_type FROM audit_logs WHERE action_type IN ($sa_actions_sql) ORDER BY action_type");
+$action_types_stmt = $pdo->query("
+    SELECT DISTINCT al.action_type 
+    FROM audit_logs al
+    JOIN users u ON al.user_id = u.user_id 
+    WHERE u.user_type = 'Super Admin' 
+    ORDER BY al.action_type
+");
 $action_types = $action_types_stmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Settings: Registered admin accounts
@@ -412,13 +581,27 @@ $super_admins_list = $super_admins_stmt->fetchAll();
 $active_tenants_list_stmt = $pdo->query("SELECT tenant_id, tenant_name FROM tenants WHERE deleted_at IS NULL ORDER BY tenant_name");
 $tenants_for_filter = $active_tenants_list_stmt->fetchAll();
 
-// Recent 5 tenants for dashboard quick-glance
+// Recent 5 actual tenant applications for dashboard quick-glance
 $recent_tenants_stmt = $pdo->query("
-    SELECT tenant_name, status, plan_tier, created_at
-    FROM tenants WHERE deleted_at IS NULL
-    ORDER BY created_at DESC LIMIT 5
+        SELECT tenant_name, status, plan_tier, created_at
+        FROM tenants
+        WHERE deleted_at IS NULL
+            AND (request_type = 'tenant_application' OR request_type IS NULL)
+        ORDER BY created_at DESC
+        LIMIT 5
 ");
 $recent_tenants = $recent_tenants_stmt->fetchAll();
+
+// Recent 5 Talk to an Expert inquiries in a separate dashboard card
+$recent_inquiries_stmt = $pdo->query("
+        SELECT tenant_name, status, created_at
+        FROM tenants
+        WHERE deleted_at IS NULL
+            AND request_type = 'talk_to_expert'
+        ORDER BY created_at DESC
+        LIMIT 5
+");
+$recent_inquiries = $recent_inquiries_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?php echo htmlspecialchars($ui_theme, ENT_QUOTES, 'UTF-8'); ?>">
@@ -454,6 +637,10 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                     <span class="material-symbols-rounded">space_dashboard</span>
                     <span>Dashboard</span>
                 </a>
+                <a href="#sales" class="nav-item" data-target="sales">
+                    <span class="material-symbols-rounded">point_of_sale</span>
+                    <span>Revenue</span>
+                </a>
 
                 <div class="nav-section-label">Management</div>
                 <a href="#tenants" class="nav-item" data-target="tenants">
@@ -461,17 +648,11 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                     <span>Tenants</span>
                 </a>
 
-                <div class="nav-section-label">Analytics</div>
+                <div class="nav-section-label">System</div>
                 <a href="#reports" class="nav-item" data-target="reports">
                     <span class="material-symbols-rounded">monitoring</span>
                     <span>Reports</span>
                 </a>
-                <a href="#sales" class="nav-item" data-target="sales">
-                    <span class="material-symbols-rounded">point_of_sale</span>
-                    <span>Revenue</span>
-                </a>
-
-                <div class="nav-section-label">System</div>
                 <a href="#backup" class="nav-item" data-target="backup">
                     <span class="material-symbols-rounded">cloud_upload</span>
                     <span>Backup</span>
@@ -537,11 +718,8 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                             <p>Here's what's happening across the platform today.</p>
                         </div>
                         <div class="welcome-actions">
-                            <button class="btn btn-primary" onclick="document.querySelector('.nav-item[data-target=tenants]').click(); setTimeout(()=>document.getElementById('btn-create-tenant').click(), 100);">
-                                <span class="material-symbols-rounded">add</span> Provision Tenant
-                            </button>
-                            <button class="btn btn-outline" onclick="document.querySelector('.nav-item[data-target=reports]').click();">
-                                <span class="material-symbols-rounded">monitoring</span> View Reports
+                            <button class="btn btn-primary" onclick="document.querySelector('.nav-item[data-target=tenants]').click();">
+                                <span class="material-symbols-rounded">manage_accounts</span> Manage Tenants
                             </button>
                         </div>
                     </div>
@@ -575,7 +753,7 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                 <h3 id="stat-pending-apps"><?php echo $pending_applications; ?></h3>
                             </div>
                             <?php if ($pending_applications > 0): ?>
-                            <a href="#tenants" class="stat-link" onclick="document.querySelector('.nav-item[data-target=tenants]').click(); setTimeout(()=>document.getElementById('tenant-status-filter').value='Pending', 100);">
+                            <a href="#tenants" class="stat-link" onclick="document.querySelector('.nav-item[data-target=tenants]').click(); setTimeout(()=>document.querySelector('.tenant-intake-tab[data-view=applications]').click(), 100);">
                                 Review <span class="material-symbols-rounded" style="font-size:16px;">arrow_forward</span>
                             </a>
                             <?php endif; ?>
@@ -595,9 +773,9 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                     <div class="dashboard-bottom-grid">
                         <!-- Charts Column -->
                         <div class="dashboard-charts-col">
-                            <!-- Moved Audit Logs -->
-                            <div class="card filter-bar" style="margin-bottom: 24px;">
-                                <div class="filter-row">
+                            <div class="card" style="margin-bottom: 24px;">
+                                <h3>Audit Trail</h3>
+                                <div class="filter-row" style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
                                     <div class="form-group">
                                         <label>Action Type</label>
                                         <select id="audit-action-filter" class="form-control">
@@ -630,11 +808,7 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                         </button>
                                     </div>
                                 </div>
-                            </div>
-
-                            <div class="card" style="margin-bottom: 24px;">
-                                <h3>Audit Trail</h3>
-                                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                <div class="table-responsive audit-table-wrap">
                                     <table class="admin-table" id="audit-logs-table">
                                         <thead>
                                             <tr>
@@ -644,7 +818,7 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                                 <th>Tenant</th>
                                                 <th>Action</th>
                                                 <th>Entity</th>
-                                                <th>Description</th>
+                                                <th>Details</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -659,7 +833,21 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                                 <td><?php echo htmlspecialchars($log['tenant_name'] ?? 'Platform'); ?></td>
                                                 <td><span class="badge badge-blue"><?php echo htmlspecialchars($log['action_type']); ?></span></td>
                                                 <td><?php echo htmlspecialchars($log['entity_type'] ?? '—'); ?></td>
-                                                <td style="white-space: normal; min-width: 250px;"><?php echo htmlspecialchars($log['description'] ?? '—'); ?></td>
+                                                <td>
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-outline btn-sm audit-detail-btn"
+                                                        data-created-at="<?php echo htmlspecialchars((string)($log['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-username="<?php echo htmlspecialchars((string)($log['username'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-user-email="<?php echo htmlspecialchars((string)($log['user_email'] ?? 'System'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-tenant-name="<?php echo htmlspecialchars((string)($log['tenant_name'] ?? 'Platform'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-action-type="<?php echo htmlspecialchars((string)($log['action_type'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-entity-type="<?php echo htmlspecialchars((string)($log['entity_type'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-description="<?php echo htmlspecialchars((string)($log['description'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                    >
+                                                        <span class="material-symbols-rounded" style="font-size:16px;">visibility</span> View
+                                                    </button>
+                                                </td>
                                             </tr>
                                             <?php endforeach; ?>
                                             <?php endif; ?>
@@ -670,7 +858,14 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
 
                             <div class="charts-grid">
                                 <div class="card">
-                                    <h3>User Growth</h3>
+                                    <div class="card-header-flex" style="margin-bottom: 12px;">
+                                        <h3 style="margin: 0;">User Growth</h3>
+                                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                                            <input type="date" id="user-growth-date-from" class="form-control" style="width: 150px;">
+                                            <input type="date" id="user-growth-date-to" class="form-control" style="width: 150px;">
+                                            <button type="button" id="btn-apply-user-growth-filter" class="btn btn-outline btn-sm">Apply</button>
+                                        </div>
+                                    </div>
                                     <div class="chart-container">
                                         <canvas id="chart-user-growth"></canvas>
                                     </div>
@@ -716,7 +911,8 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                         switch ($rt_status) {
                                             case 'Active': $rt_badge = 'badge-green'; break;
                                             case 'Pending': $rt_badge = 'badge-amber'; break;
-                                            case 'Contacted': $rt_badge = 'badge-blue'; break;
+                                            case 'New': $rt_badge = 'badge-blue'; break;
+                                            case 'In Contact': $rt_badge = 'badge-blue'; break;
                                             case 'Suspended': $rt_badge = 'badge-red'; break;
                                             default: $rt_badge = ''; break;
                                         }
@@ -728,41 +924,49 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                 </div>
                             </div>
 
-                            <!-- Platform Health -->
                             <div class="card">
-                                <h3>Platform Health</h3>
-                                <div class="health-metrics">
-                                    <div class="metric-row">
-                                        <span>Active Tenants</span>
-                                        <div class="progress-bar-wrapper">
-                                            <div class="progress-bar" style="--progress: <?php echo min($active_tenants * 10, 100); ?>%; --bar-color: var(--accent-green);"></div>
-                                            <span class="progress-text"><?php echo $active_tenants; ?> active</span>
-                                        </div>
+                                <div class="card-header-flex" style="margin-bottom: 16px;">
+                                    <h3 style="margin-bottom: 0;">Recent Inquiries</h3>
+                                    <a href="#tenants" class="btn-text" onclick="document.querySelector('.nav-item[data-target=tenants]').click(); setTimeout(()=>document.querySelector('.tenant-intake-tab[data-view=inquiries]').click(), 100);">View Inquiries</a>
+                                </div>
+                                <div class="recent-tenants-list">
+                                    <?php if (count($recent_inquiries) === 0): ?>
+                                    <div class="empty-state-mini">
+                                        <span class="material-symbols-rounded">support_agent</span>
+                                        <p>No inquiries yet</p>
                                     </div>
-                                    <div class="metric-row">
-                                        <span>Users</span>
-                                        <div class="progress-bar-wrapper">
-                                            <div class="progress-bar" style="--progress: <?php echo min($active_users * 2, 100); ?>%; --bar-color: var(--primary-color);"></div>
-                                            <span class="progress-text"><?php echo $active_users; ?> active / <?php echo $inactive_users; ?> inactive</span>
+                                    <?php else: ?>
+                                    <?php foreach ($recent_inquiries as $ri): ?>
+                                    <div class="recent-tenant-item">
+                                        <div class="recent-tenant-avatar">
+                                            <?php echo strtoupper(substr($ri['tenant_name'], 0, 2)); ?>
                                         </div>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span>Pending</span>
-                                        <div class="progress-bar-wrapper">
-                                            <div class="progress-bar" style="--progress: <?php echo min($pending_applications * 20, 100); ?>%; --bar-color: var(--accent-amber);"></div>
-                                            <span class="progress-text"><?php echo $pending_applications; ?> awaiting review</span>
+                                        <div class="recent-tenant-info">
+                                            <span class="recent-tenant-name"><?php echo htmlspecialchars($ri['tenant_name']); ?></span>
+                                            <span class="recent-tenant-meta">
+                                                Talk to Expert &middot; <?php echo date('M d', strtotime($ri['created_at'])); ?>
+                                            </span>
                                         </div>
+                                        <?php
+                                        $ri_status_raw = (string)($ri['status'] ?? 'Pending');
+                                        if (in_array($ri_status_raw, ['Pending', 'New'], true)) {
+                                            $ri_status = 'New';
+                                            $ri_badge = 'badge-blue';
+                                        } elseif (in_array($ri_status_raw, ['Contacted', 'In Contact'], true)) {
+                                            $ri_status = 'In Contact';
+                                            $ri_badge = 'badge-amber';
+                                        } else {
+                                            $ri_status = 'Closed';
+                                            $ri_badge = 'badge-red';
+                                        }
+                                        ?>
+                                        <span class="badge badge-sm <?php echo $ri_badge; ?>"><?php echo htmlspecialchars($ri_status); ?></span>
                                     </div>
+                                    <?php endforeach; ?>
+                                    <?php endif; ?>
                                 </div>
                             </div>
 
-                            <!-- Moved Revenue Trends -->
-                            <div class="card">
-                                <h3>Revenue Trends</h3>
-                                <div class="chart-container" style="height: 250px;">
-                                    <canvas id="chart-sales-trends"></canvas>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </section>
@@ -771,20 +975,33 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                 <!-- SECTION 2: TENANT MANAGEMENT -->
                 <!-- ============================================================ -->
                 <section id="tenants" class="view-section">
+                    <div class="settings-tabs" style="margin-bottom: 16px;">
+                        <button class="settings-tab tenant-intake-tab active" data-view="tenants">Tenants</button>
+                        <button class="settings-tab tenant-intake-tab" data-view="applications">Applications</button>
+                        <button class="settings-tab tenant-intake-tab" data-view="inquiries">Inquiries</button>
+                    </div>
                     <div class="card">
                         <div class="card-header-flex mb-4">
                             <div>
                                 <h3>Tenant Management</h3>
-                                <p class="text-muted">Manage all tenant organizations and demo requests.</p>
+                                <p class="text-muted">Manage all tenant organizations and inquiries.</p>
                             </div>
                             <div class="actions-flex">
                                 <select id="tenant-status-filter" class="form-control" style="width: 200px;">
                                     <option value="all">All Statuses</option>
-                                    <option value="Active">Active</option>
-                                    <option value="Pending">Pending</option>
-                                    <option value="Suspended">Suspended</option>
-                                    <option value="Archived">Archived</option>
-                                    <option value="Rejected">Rejected</option>
+                                    <option value="active">Active</option>
+                                    <option value="suspended">Suspended</option>
+                                </select>
+                                <select id="application-status-filter" class="form-control" style="width: 200px; display: none;">
+                                    <option value="all">All Application Statuses</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="rejected">Rejected</option>
+                                </select>
+                                <select id="inquiry-status-filter" class="form-control" style="width: 200px; display: none;">
+                                    <option value="all">All Inquiry Statuses</option>
+                                    <option value="new">New</option>
+                                    <option value="in_contact">In Contact</option>
+                                    <option value="closed">Closed</option>
                                 </select>
                                 <div class="search-box">
                                     <span class="material-symbols-rounded">search</span>
@@ -800,7 +1017,7 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                         <th>Owner / Contact</th>
                                         <th>Status</th>
                                         <th>Plan</th>
-                                        <th>Price</th>
+                                        <th>MRR</th>
                                         <th>Created</th>
                                         <th>Actions</th>
                                     </tr>
@@ -815,10 +1032,9 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                     </tr>
                                     <?php else: ?>
                                     <?php foreach ($tenant_rows as $t): ?>
-                                    <tr data-status="<?php echo htmlspecialchars($t['status']); ?>">
+                                    <tr data-status="<?php echo htmlspecialchars($t['status']); ?>" data-request-type="<?php echo htmlspecialchars($t['request_type'] ?? 'tenant_application'); ?>">
                                         <td>
                                             <?php echo htmlspecialchars($t['tenant_name']); ?><br>
-                                            <small class="text-muted">Slug: <?php echo htmlspecialchars($t['tenant_slug'] ?? '—'); ?></small><br>
                                             <small class="text-muted">ID: <?php echo htmlspecialchars($t['tenant_id'] ?? '—'); ?></small>
                                         </td>
                                         <td>
@@ -828,7 +1044,8 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                             echo htmlspecialchars($owner_name !== '' ? $owner_name : ($owner_username !== '' ? $owner_username : '—'));
                                             ?><br>
                                             <small class="text-muted">@<?php echo htmlspecialchars($owner_username !== '' ? $owner_username : '—'); ?></small><br>
-                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_email'] ?? $t['email'] ?? '—'); ?></small>
+                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_email'] ?? '—'); ?></small><br>
+                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_phone'] ?? '—'); ?></small>
                                             <br>
                                             <?php $doc_count = (int)($t['legitimacy_document_count'] ?? 0); ?>
                                             <?php if ($doc_count > 0): ?>
@@ -837,25 +1054,60 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                         <td>
                                             <?php
                                             $status = $t['status'];
+                                            $request_type = (string)($t['request_type'] ?? 'tenant_application');
                                             $badge_class = '';
                                             $badge_style = '';
-                                            switch ($status) {
-                                                case 'Active': $badge_class = 'badge-green'; break;
-                                                case 'Suspended': $badge_style = 'background:#fee2e2; color:#b91c1c;'; break;
-                                                case 'Pending': $badge_style = 'background:#fef08a; color:#b45309;'; break;
-                                                case 'Contacted': $badge_style = 'background:#dbeafe; color:#1e40af;'; break;
-                                                case 'Accepted': $badge_style = 'background:#d1fae5; color:#065f46;'; break;
-                                                case 'Rejected': $badge_style = 'background:#fee2e2; color:#991b1b;'; break;
-                                                case 'Draft': $badge_style = 'background:#f3f4f6; color:#6b7280;'; break;
-                                                default: break;
+                                            $normalized_status = $status;
+                                            if ($request_type === 'talk_to_expert') {
+                                                if (in_array($status, ['Pending', 'New'], true)) {
+                                                    $normalized_status = 'New';
+                                                } elseif (in_array($status, ['Contacted', 'In Contact'], true)) {
+                                                    $normalized_status = 'In Contact';
+                                                } else {
+                                                    $normalized_status = 'Closed';
+                                                }
+                                            } else {
+                                                if (in_array($status, ['Active'], true)) {
+                                                    $normalized_status = 'Active';
+                                                } elseif (in_array($status, ['Suspended'], true)) {
+                                                    $normalized_status = 'Suspended';
+                                                } elseif (in_array($status, ['Rejected'], true)) {
+                                                    $normalized_status = 'Rejected';
+                                                } else {
+                                                    $normalized_status = 'Pending';
+                                                }
+                                            }
+
+                                            switch ($normalized_status) {
+                                                case 'Active':
+                                                    $badge_class = 'badge-green';
+                                                    break;
+                                                case 'Suspended':
+                                                    $badge_style = 'background:#fee2e2; color:#b91c1c;';
+                                                    break;
+                                                case 'Rejected':
+                                                    $badge_style = 'background:#fee2e2; color:#991b1b;';
+                                                    break;
+                                                case 'New':
+                                                    $badge_style = 'background:#dbeafe; color:#1e3a8a;';
+                                                    break;
+                                                case 'In Contact':
+                                                    $badge_style = 'background:#fef3c7; color:#b45309;';
+                                                    break;
+                                                case 'Closed':
+                                                    $badge_style = 'background:#e5e7eb; color:#374151;';
+                                                    break;
+                                                default:
+                                                    $badge_style = 'background:#fef08a; color:#b45309;';
+                                                    break;
                                             }
                                             ?>
                                             <span class="badge <?php echo $badge_class; ?>" <?php if ($badge_style) echo "style=\"{$badge_style}\""; ?>>
-                                                <?php echo htmlspecialchars($status); ?>
+                                                <?php echo htmlspecialchars($normalized_status); ?>
                                             </span>
                                         </td>
                                         <td><?php echo htmlspecialchars($t['plan_tier'] ?? '—'); ?></td>
-                                        <td>₱<?php echo htmlspecialchars(number_format((float)($t['mrr'] ?? 0), 2)); ?></td>
+                                        <td>₱<?php echo number_format((float)($t['mrr'] ?? 0), 2); ?></td>
                                         <td><?php echo date('M d, Y', strtotime($t['created_at'])); ?></td>
                                         <td>
                                             <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
@@ -873,7 +1125,24 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
 
 
 
-                                                <?php if (in_array($status, ['Pending', 'Contacted'])): ?>
+                                                <?php if (($t['request_type'] ?? 'tenant_application') === 'talk_to_expert' && in_array($status, ['Pending', 'Contacted', 'New', 'In Contact'])): ?>
+                                                    <form method="POST" style="display:inline;">
+                                                        <input type="hidden" name="action" value="send_talk_email">
+                                                        <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($t['tenant_id']); ?>">
+                                                        <button type="submit" class="btn btn-outline btn-sm" title="Send Consultation Email">
+                                                            <span class="material-symbols-rounded" style="font-size:16px;">mail</span> Email
+                                                        </button>
+                                                    </form>
+
+                                                    <form method="POST" style="display:inline;">
+                                                        <input type="hidden" name="action" value="close_inquiry">
+                                                        <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($t['tenant_id']); ?>">
+                                                        <button type="submit" class="btn btn-outline btn-sm" title="Close Inquiry">
+                                                            <span class="material-symbols-rounded" style="font-size:16px;">task_alt</span> Close
+                                                        </button>
+                                                    </form>
+
+                                                <?php elseif ($status === 'Pending'): ?>
                                                     <!-- Provision: opens provision modal -->
                                                     <?php
                                                     $startup_username = trim((string)($t['owner_username'] ?? ''));
@@ -882,14 +1151,14 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                                     <button class="btn btn-sm btn-provision-from-demo"
                                                         style="background:#10b981; color:#fff; border:none; border-radius:10px; padding:6px 12px; font-weight:600; display:inline-flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(16,185,129,0.3);"
                                                         data-tenant-name="<?php echo htmlspecialchars($t['tenant_name']); ?>"
-                                                        data-company-email="<?php echo htmlspecialchars($t['email'] ?? ''); ?>"
+                                                        data-company-email="<?php echo htmlspecialchars($t['owner_email'] ?? ''); ?>"
                                                         data-plan-tier="<?php echo htmlspecialchars($t['plan_tier'] ?? 'Starter'); ?>"
-                                                        data-first-name="<?php echo htmlspecialchars($t['first_name'] ?? ''); ?>"
-                                                        data-last-name="<?php echo htmlspecialchars($t['last_name'] ?? ''); ?>"
-                                                        data-mi="<?php echo htmlspecialchars($t['mi'] ?? ''); ?>"
-                                                        data-suffix="<?php echo htmlspecialchars($t['suffix'] ?? ''); ?>"
-                                                        data-branch-name="<?php echo htmlspecialchars($t['branch_name'] ?? ''); ?>"
-                                                        data-contact-number="<?php echo htmlspecialchars($t['contact_number'] ?? ''); ?>"
+                                                        data-request-type="<?php echo htmlspecialchars($t['request_type'] ?? 'tenant_application'); ?>"
+                                                        data-first-name="<?php echo htmlspecialchars($t['owner_first_name'] ?? ''); ?>"
+                                                        data-last-name="<?php echo htmlspecialchars($t['owner_last_name'] ?? ''); ?>"
+                                                        data-mi=""
+                                                        data-suffix=""
+                                                        data-company-address="<?php echo htmlspecialchars($t['company_address'] ?? ''); ?>"
                                                         title="Provision Tenant (Startup User: <?php echo htmlspecialchars($startup_user_label); ?>)">
                                                         <span class="material-symbols-rounded" style="font-size:16px;">rocket_launch</span> Provision <?php echo htmlspecialchars($startup_user_label); ?>
                                                     </button>
@@ -913,15 +1182,6 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                                         <input type="hidden" name="new_status" value="Suspended">
                                                         <button type="submit" class="btn btn-outline btn-sm" style="color:#b91c1c; border-color:#fca5a5;" title="Suspend Tenant">
                                                             <span class="material-symbols-rounded" style="font-size:16px;">block</span>
-                                                        </button>
-                                                    </form>
-                                                    <!-- Deactivate -->
-                                                    <form method="POST" style="display:inline;">
-                                                        <input type="hidden" name="action" value="toggle_status">
-                                                        <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($t['tenant_id']); ?>">
-                                                        <input type="hidden" name="new_status" value="Archived">
-                                                        <button type="submit" class="btn btn-outline btn-sm" style="color:#6b7280;" title="Deactivate Tenant">
-                                                            <span class="material-symbols-rounded" style="font-size:16px;">archive</span>
                                                         </button>
                                                     </form>
                                                 <?php elseif ($status === 'Suspended'): ?>
@@ -1008,59 +1268,15 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                 <!-- SECTION 4: SALES REPORT -->
                 <!-- ============================================================ -->
                 <section id="sales" class="view-section">
-                    <div class="card filter-bar">
-                        <div class="filter-row">
-                            <div class="form-group">
-                                <label>Period</label>
-                                <select id="sales-period" class="form-control">
-                                    <option value="daily">Daily</option>
-                                    <option value="weekly">Weekly</option>
-                                    <option value="monthly" selected>Monthly</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Date From</label>
-                                <input type="date" id="sales-date-from" class="form-control">
-                            </div>
-                            <div class="form-group">
-                                <label>Date To</label>
-                                <input type="date" id="sales-date-to" class="form-control">
-                            </div>
-                            <div class="form-group" style="align-self: flex-end;">
-                                <button class="btn btn-primary" id="btn-apply-sales-filter">
-                                    <span class="material-symbols-rounded">filter_alt</span> Apply
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Revenue Summary Cards -->
-                    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
-                        <div class="stat-card">
-                            <div class="stat-icon bg-green">
-                                <span class="material-symbols-rounded">account_balance</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Total Revenue</p>
-                                <h3 id="sales-total-revenue">₱0.00</h3>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon bg-blue">
-                                <span class="material-symbols-rounded">receipt_long</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Total Transactions</p>
-                                <h3 id="sales-total-transactions">0</h3>
-                            </div>
-                        </div>
+                    <!-- Revenue Overview (Consolidated) -->
+                    <div class="stats-grid" style="grid-template-columns: repeat(1, 1fr); margin-bottom: 24px;">
                         <div class="stat-card">
                             <div class="stat-icon bg-purple">
-                                <span class="material-symbols-rounded">trending_up</span>
+                                <span class="material-symbols-rounded">payments</span>
                             </div>
                             <div class="stat-details">
-                                <p>Avg Transaction</p>
-                                <h3 id="sales-avg-transaction">₱0.00</h3>
+                                <p>Total MRR</p>
+                                <h3>₱<?php echo htmlspecialchars($total_mrr); ?></h3>
                             </div>
                         </div>
                     </div>
@@ -1087,7 +1303,13 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                             </div>
                         </div>
                         <div class="card">
-                            <h3>Revenue Over Time</h3>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                                <h3 style="margin: 0;">Monthly Revenue</h3>
+                                <select id="revenue-period-filter" class="form-control" style="width: auto;">
+                                    <option value="monthly">Monthly</option>
+                                    <option value="yearly">Yearly</option>
+                                </select>
+                            </div>
                             <div class="chart-container">
                                 <canvas id="chart-revenue"></canvas>
                             </div>
@@ -1097,6 +1319,7 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                     <!-- Transaction History -->
                     <div class="card">
                         <h3>Transaction History</h3>
+                        <p class="text-muted" style="margin-bottom: 16px;">Payment history is consolidated here.</p>
                         <div class="table-responsive">
                             <table class="admin-table" id="sales-transactions-table">
                                 <thead>
@@ -1115,6 +1338,7 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                             </table>
                         </div>
                     </div>
+
                 </section>
 
 
@@ -1302,6 +1526,7 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
             </div>
             <form class="modal-body" method="POST" action="">
                 <input type="hidden" name="action" value="provision_tenant">
+                <input type="hidden" name="request_type" value="tenant_application">
                 <div class="form-group">
                     <label>Company / Institution Name</label>
                     <input type="text" class="form-control" name="tenant_name" placeholder="e.g. Village Microfinance" required>
@@ -1323,14 +1548,8 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                         <small class="text-muted">A secure, private login link will be emailed to this address.</small>
                     </div>
                     <div>
-                        <label>Contact Number</label>
-                        <input type="text" class="form-control" name="contact_number" placeholder="09171234567">
-                    </div>
-                </div>
-                <div class="form-group row-2">
-                    <div>
-                        <label>Location / Branch</label>
-                        <input type="text" class="form-control" name="branch_name" placeholder="e.g. Marilao, Bulacan">
+                        <label>Company Address</label>
+                        <input type="text" class="form-control" name="company_address" placeholder="e.g. Marilao, Bulacan">
                     </div>
                     <div>
                         <label>Plan Tier</label>
@@ -1348,6 +1567,53 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                     <button type="submit" class="btn btn-primary" id="submit-tenant"><span class="material-symbols-rounded">rocket_launch</span> Provision Instance</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Audit Details Modal -->
+    <div id="modal-audit-backdrop" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Audit Log Details</h2>
+                <button class="icon-btn" id="close-audit-modal"><span class="material-symbols-rounded">close</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Timestamp</label>
+                    <input type="text" id="audit-detail-created-at" class="form-control" readonly>
+                </div>
+                <div class="form-group row-2">
+                    <div>
+                        <label>Username</label>
+                        <input type="text" id="audit-detail-username" class="form-control" readonly>
+                    </div>
+                    <div>
+                        <label>User / Email</label>
+                        <input type="text" id="audit-detail-user-email" class="form-control" readonly>
+                    </div>
+                </div>
+                <div class="form-group row-2">
+                    <div>
+                        <label>Tenant</label>
+                        <input type="text" id="audit-detail-tenant-name" class="form-control" readonly>
+                    </div>
+                    <div>
+                        <label>Action</label>
+                        <input type="text" id="audit-detail-action-type" class="form-control" readonly>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Entity</label>
+                    <input type="text" id="audit-detail-entity-type" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="audit-detail-description" class="form-control" rows="6" readonly></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" id="close-audit-modal-footer">Close</button>
+            </div>
         </div>
     </div>
 

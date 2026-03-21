@@ -753,6 +753,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 throw new Exception('Invalid email address.');
             }
 
+            // Enforce max_users limit for Staff Accounts
+            $plan_stmt = $pdo->prepare('SELECT max_users FROM tenants WHERE tenant_id = ? LIMIT 1');
+            $plan_stmt->execute([$tenant_id]);
+            $max_users = (int) $plan_stmt->fetchColumn();
+
+            if ($max_users > 0 && $status === 'Active') {
+                $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE tenant_id = ? AND user_type = 'Employee'");
+                $count_stmt->execute([$tenant_id]);
+                $current_staff = (int) $count_stmt->fetchColumn();
+
+                if ($current_staff >= $max_users) {
+                    throw new Exception('Your organization has reached the maximum number of staff accounts allowed by your subscription plan. Please upgrade to add more staff.');
+                }
+            }
+
             // Generate an initial username and password
             $base_username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $first_name . '.' . $last_name));
             $username = $base_username;
@@ -1224,17 +1239,13 @@ function hexToRgb($hex) {
                     <span>Dashboard</span>
                 </a>
 
-                <span class="sidebar-section-title">Management</span>
-                <a href="#staff" class="nav-item <?php echo $active_view === 'staff' ? 'active' : ''; ?>" data-target="staff" data-title="Staff &amp; Roles">
+                <span class="sidebar-section-title">User Management</span>
+                <a href="#staff" class="nav-item <?php echo $active_view === 'staff' ? 'active' : ''; ?>" data-target="staff" data-title="Staff Accounts">
                     <span class="material-symbols-rounded">groups</span>
-                    <span>Staff & Roles</span>
+                    <span>Staff Accounts</span>
                 </a>
 
-                <span class="sidebar-section-title">Configuration</span>
-                <a href="#billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing" data-title="Billing &amp; Subscription">
-                    <span class="material-symbols-rounded">receipt_long</span>
-                    <span>Billing</span>
-                </a>
+                <span class="sidebar-section-title">Platform Settings</span>
                 <a href="#website" class="nav-item <?php echo $active_view === 'website' ? 'active' : ''; ?>" data-target="website" data-title="Website Editor">
                     <span class="material-symbols-rounded">language</span>
                     <span>Website</span>
@@ -1243,13 +1254,21 @@ function hexToRgb($hex) {
                     <span class="material-symbols-rounded">toggle_on</span>
                     <span>Feature Toggles</span>
                 </a>
+
+                <span class="sidebar-section-title">Billing & Subscription</span>
+                <a href="#billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing" data-title="Billing &amp; Subscription">
+                    <span class="material-symbols-rounded">receipt_long</span>
+                    <span>Billing</span>
+                </a>
+
+                <span class="sidebar-section-title">Account</span>
                 <a href="#settings" class="nav-item <?php echo $active_view === 'settings' ? 'active' : ''; ?>" data-target="settings" data-title="Settings">
                     <span class="material-symbols-rounded">settings</span>
-                    <span>Settings</span>
+                    <span>General Settings</span>
                 </a>
                 <a href="#settings" class="nav-item <?php echo $active_view === 'personal' ? 'active' : ''; ?>" data-target="settings" data-subtab="personal-profile" data-title="Personal Settings">
                     <span class="material-symbols-rounded">person</span>
-                    <span>Personal</span>
+                    <span>Personal Profile</span>
                 </a>
             </nav>
 
@@ -1619,211 +1638,324 @@ function hexToRgb($hex) {
 
                 <!-- Billing & Subscription View -->
                 <section id="billing" class="view-section <?php echo $active_view === 'billing' ? 'active' : ''; ?>">
-                    <div class="card">
-                        <h3>Billing & Subscription</h3>
-                        <p class="text-muted" style="margin-bottom: 24px;">Manage your subscription plan, payment methods, and view invoices.</p>
+                    <div class="header-desc" style="margin-bottom: 24px;">
+                        <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 4px;">Billing & Subscription</h2>
+                        <p class="text-muted">Manage your subscription plan, track usage limits, and view invoices.</p>
+                    </div>
 
-                        <div class="stats-grid" style="margin-bottom: 32px;">
-                            <div class="stat-card">
-                                <div class="stat-icon" style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary-color);">
-                                    <span class="material-symbols-rounded">workspace_premium</span>
-                                </div>
-                                <div class="stat-details">
-                                    <p>Current Plan</p>
-                                    <h3><?php
-                                        $plan_stmt = $pdo->prepare('SELECT plan_tier FROM tenants WHERE tenant_id = ?');
-                                        $plan_stmt->execute([$tenant_id]);
-                                        $current_plan = $plan_stmt->fetchColumn() ?: 'Starter';
-                                        $plan_aliases = ['Professional' => 'Pro', 'Elite' => 'Enterprise'];
-                                        if (isset($plan_aliases[$current_plan])) {
-                                            $current_plan = $plan_aliases[$current_plan];
-                                        }
-                                        $plan_catalog = [
-                                            'Starter' => ['label' => 'Starter', 'price' => 4999],
-                                            'Growth' => ['label' => 'Growth', 'price' => 9999],
-                                            'Pro' => ['label' => 'Pro', 'price' => 14999],
-                                            'Enterprise' => ['label' => 'Enterprise', 'price' => 22999],
-                                            'Unlimited' => ['label' => 'Unlimited', 'price' => 29999]
-                                        ];
-                                        if (!isset($plan_catalog[$current_plan])) {
-                                            $plan_catalog[$current_plan] = ['label' => $current_plan, 'price' => 0];
-                                        }
-                                        echo htmlspecialchars($current_plan);
-                                    ?></h3>
-                                    <p class="text-muted" style="margin-top: 2px; font-size: 0.85rem;">₱<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 2); ?>/month</p>
+                    <div class="tabs" style="margin-bottom: 24px;">
+                        <button class="tab-btn <?php echo (!isset($_GET['sub']) || $_GET['sub'] !== 'payment' && $_GET['sub'] !== 'history') ? 'active' : ''; ?>" data-tab="billing-overview">Overview</button>
+                        <button class="tab-btn <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'payment') ? 'active' : ''; ?>" data-tab="billing-payment">Payment Info</button>
+                        <button class="tab-btn <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'history') ? 'active' : ''; ?>" data-tab="billing-history">Payment History</button>
+                    </div>
+
+                    <!-- 1. Overview Tab -->
+                    <div id="billing-overview" class="tab-content <?php echo (!isset($_GET['sub']) || $_GET['sub'] !== 'payment' && $_GET['sub'] !== 'history') ? 'active' : ''; ?>">
+                            <?php
+                                $plan_stmt = $pdo->prepare('SELECT plan_tier, max_clients, max_users FROM tenants WHERE tenant_id = ?');
+                                $plan_stmt->execute([$tenant_id]);
+                                $tenant_plan = $plan_stmt->fetch(PDO::FETCH_ASSOC) ?: ['plan_tier' => 'Starter', 'max_clients' => 1000, 'max_users' => 250];
+                                
+                                $current_plan = $tenant_plan['plan_tier'];
+                                $plan_aliases = ['Professional' => 'Pro', 'Elite' => 'Enterprise'];
+                                if (isset($plan_aliases[$current_plan])) {
+                                    $current_plan = $plan_aliases[$current_plan];
+                                }
+                                $plan_catalog = [
+                                    'Starter' => ['label' => 'Starter', 'price' => 4999],
+                                    'Growth' => ['label' => 'Growth', 'price' => 9999],
+                                    'Pro' => ['label' => 'Pro', 'price' => 14999],
+                                    'Enterprise' => ['label' => 'Enterprise', 'price' => 22999],
+                                    'Unlimited' => ['label' => 'Unlimited', 'price' => 29999]
+                                ];
+                                if (!isset($plan_catalog[$current_plan])) {
+                                    $plan_catalog[$current_plan] = ['label' => $current_plan, 'price' => 0];
+                                }
+
+                                $max_clients = (int)$tenant_plan['max_clients'];
+                                $max_users = (int)$tenant_plan['max_users'];
+                                
+                                $client_count_stmt = $pdo->prepare("SELECT COUNT(*) FROM clients WHERE tenant_id = ? AND client_status = 'Active'");
+                                $client_count_stmt->execute([$tenant_id]);
+                                $current_total_clients = (int)$client_count_stmt->fetchColumn();
+                                
+                                $staff_count_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE tenant_id = ? AND user_type = 'Employee' AND status = 'Active'");
+                                $staff_count_stmt->execute([$tenant_id]);
+                                $current_active_staff = (int)$staff_count_stmt->fetchColumn();
+                                
+                                $client_pct = $max_clients > 0 ? min(100, round(($current_total_clients / $max_clients) * 100)) : 0;
+                                $staff_pct = $max_users > 0 ? min(100, round(($current_active_staff / $max_users) * 100)) : 0;
+                            ?>
+
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
+                                <!-- Premium Plan Card -->
+                                <div class="card" style="background: linear-gradient(135deg, var(--primary-color) 0%, #3b82f6 100%); color: white; border: none; box-shadow: 0 10px 25px rgba(59, 130, 246, 0.25); display: flex; flex-direction: column; position: relative; overflow: hidden; padding: 32px;">
+                                    <div style="position: absolute; top: -50px; right: -50px; width: 200px; height: 200px; background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 70%); border-radius: 50%;"></div>
+                                    <div style="position: absolute; bottom: -30px; left: -30px; width: 150px; height: 150px; background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%); border-radius: 50%;"></div>
+                                    
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; z-index: 1;">
+                                        <div>
+                                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                                                <span class="material-symbols-rounded" style="font-size: 18px; color: #fbbf24;">workspace_premium</span>
+                                                <span style="text-transform: uppercase; font-size: 0.75rem; font-weight: 700; opacity: 0.9; letter-spacing: 0.05em;">Active Subscription</span>
+                                            </div>
+                                            <h3 style="font-size: 2.25rem; font-weight: 800; margin: 0; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.1);"><?php echo htmlspecialchars($current_plan); ?></h3>
+                                        </div>
+                                        <div style="background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); padding: 8px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); text-align: right;">
+                                            <div style="font-weight: 800; font-size: 1.25rem;">₱<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 0); ?></div>
+                                            <div style="font-size: 0.75rem; opacity: 0.9;">per month</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div style="margin-top: 32px; z-index: 1; display: flex; flex-direction: column; gap: 12px;">
+                                        <div style="display: flex; align-items: center; gap: 10px; font-size: 0.95rem;">
+                                            <div style="background: rgba(255,255,255,0.2); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">
+                                                <span class="material-symbols-rounded" style="font-size: 14px;">check</span>
+                                            </div>
+                                            <span><strong><?php echo $max_clients > 0 ? number_format($max_clients) : 'Unlimited'; ?></strong> Client Accounts</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 10px; font-size: 0.95rem;">
+                                            <div style="background: rgba(255,255,255,0.2); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">
+                                                <span class="material-symbols-rounded" style="font-size: 14px;">check</span>
+                                            </div>
+                                            <span><strong><?php echo $max_users > 0 ? number_format($max_users) : 'Unlimited'; ?></strong> Staff Accounts</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 10px; font-size: 0.95rem;">
+                                            <div style="background: rgba(255,255,255,0.2); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">
+                                                <span class="material-symbols-rounded" style="font-size: 14px;">check</span>
+                                            </div>
+                                            <span>Premium Technical Support</span>
+                                        </div>
+                                    </div>
                                     
                                     <?php if ($is_admin_account): ?>
-                                    <div style="margin-top: 12px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 12px;">
-                                        <form method="POST" action="admin.php" style="display: flex; gap: 8px; flex-direction: column;">
-                                            <input type="hidden" name="action" value="update_subscription_plan">
-                                            <label style="font-size:0.75rem; font-weight:600; color:var(--text-muted); text-transform:uppercase;">Change Subscription Type</label>
-                                            <div style="display:flex; gap:8px;">
-                                                <select name="new_plan" id="new-plan-select" class="form-control" style="padding: 6px 10px; font-size: 0.85rem; height: auto;">
-                                                    <option value="Starter" data-price="4999" <?php echo $current_plan === 'Starter' ? 'selected' : ''; ?>>Starter - ₱4,999/mo</option>
-                                                    <option value="Growth" data-price="9999" <?php echo $current_plan === 'Growth' ? 'selected' : ''; ?>>Growth - ₱9,999/mo</option>
-                                                    <option value="Pro" data-price="14999" <?php echo $current_plan === 'Pro' ? 'selected' : ''; ?>>Pro - ₱14,999/mo</option>
-                                                    <option value="Enterprise" data-price="22999" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - ₱22,999/mo</option>
-                                                    <option value="Unlimited" data-price="29999" <?php echo $current_plan === 'Unlimited' ? 'selected' : ''; ?>>Unlimited - ₱29,999/mo</option>
+                                    <div style="margin-top: auto; padding-top: 32px; z-index: 1;">
+                                        <div style="background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); padding: 16px; border-radius: 12px;">
+                                            <label style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; opacity: 0.9;">Manage Plan</label>
+                                            <form method="POST" action="admin.php" style="display: flex; gap: 12px; align-items: center;">
+                                                <input type="hidden" name="action" value="update_subscription_plan">
+                                                <select name="new_plan" id="new-plan-select" style="flex: 1; background: rgba(255,255,255,0.9); border: none; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; font-weight: 500; color: #1e293b; outline: none; cursor: pointer;">
+                                                    <option value="Starter" <?php echo $current_plan === 'Starter' ? 'selected' : ''; ?>>Starter - ₱4,999/mo</option>
+                                                    <option value="Growth" <?php echo $current_plan === 'Growth' ? 'selected' : ''; ?>>Growth - ₱9,999/mo</option>
+                                                    <option value="Pro" <?php echo $current_plan === 'Pro' ? 'selected' : ''; ?>>Pro - ₱14,999/mo</option>
+                                                    <option value="Enterprise" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - ₱22,999/mo</option>
+                                                    <option value="Unlimited" <?php echo $current_plan === 'Unlimited' ? 'selected' : ''; ?>>Unlimited - ₱29,999/mo</option>
                                                 </select>
-                                                <button type="submit" class="btn btn-primary btn-sm" style="padding: 6px 12px; font-size: 0.85rem;">Update</button>
-                                            </div>
-                                            <p id="selected-plan-price" class="text-muted" style="margin: 2px 0 0; font-size: 0.8rem;">Selected plan price: ₱<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 2); ?>/month</p>
-                                        </form>
+                                                <button type="submit" style="background: white; color: var(--primary-color); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">Upgrade</button>
+                                            </form>
+                                        </div>
                                     </div>
                                     <?php endif; ?>
                                 </div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1); color: #22c55e;">
-                                    <span class="material-symbols-rounded">credit_card</span>
-                                </div>
-                                <div class="stat-details">
-                                    <p>Payment Methods</p>
-                                    <h3><?php
-                                        $pm_stmt = $pdo->prepare('SELECT COUNT(*) FROM tenant_billing_payment_methods WHERE tenant_id = ?');
-                                        $pm_stmt->execute([$tenant_id]);
-                                        echo $pm_stmt->fetchColumn();
-                                    ?></h3>
-                                </div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">
-                                    <span class="material-symbols-rounded">receipt</span>
-                                </div>
-                                <div class="stat-details">
-                                    <p>Open Invoices</p>
-                                    <h3><?php
-                                        $inv_stmt = $pdo->prepare("SELECT COUNT(*) FROM tenant_billing_invoices WHERE tenant_id = ? AND status = 'Open'");
-                                        $inv_stmt->execute([$tenant_id]);
-                                        echo $inv_stmt->fetchColumn();
-                                    ?></h3>
-                                </div>
-                            </div>
-                        </div>
 
-                        <h4 style="margin: 6px 0 16px;">Saved Payment Methods</h4>
-                        <div class="table-responsive" style="margin-bottom: 28px;">
-                            <table class="admin-table">
-                                <thead>
-                                    <tr>
-                                        <th>Card</th>
-                                        <th>Cardholder</th>
-                                        <th>Expiry</th>
-                                        <th>Default</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php
-                                    $payment_methods_stmt = $pdo->prepare('SELECT method_id, last_four_digits, cardholder_name, exp_month, exp_year, is_default, created_at FROM tenant_billing_payment_methods WHERE tenant_id = ? ORDER BY is_default DESC, created_at ASC');
-                                    $payment_methods_stmt->execute([$tenant_id]);
-                                    $payment_methods = $payment_methods_stmt->fetchAll(PDO::FETCH_ASSOC);
-                                    if (empty($payment_methods)):
-                                    ?>
-                                    <tr>
-                                        <td colspan="5" style="text-align: center; padding: 1.5rem; color: var(--text-muted);">
-                                            No payment methods found yet. Please add one in onboarding billing setup.
-                                        </td>
-                                    </tr>
-                                    <?php else: ?>
-                                        <?php foreach ($payment_methods as $pm): ?>
+                                <!-- Usage Limits Card -->
+                                <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; padding: 32px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                                    <div>
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <div style="background: #e2e8f0; color: #475569; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                                <span class="material-symbols-rounded" style="font-size: 18px;">analytics</span>
+                                            </div>
+                                            <h4 style="font-size: 1.25rem; font-weight: 700; margin: 0; color: #1e293b;">Usage & Limits</h4>
+                                        </div>
+                                        <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 32px; line-height: 1.5;">Monitor your system capacity against your current plan constraints.</p>
+                                        
+                                        <div style="margin-bottom: 32px;">
+                                            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; align-items: flex-end;">
+                                                <div style="display: flex; align-items: center; gap: 12px;">
+                                                    <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary-color); display: flex; align-items: center; justify-content: center;">
+                                                        <span class="material-symbols-rounded" style="font-size: 20px;">group</span>
+                                                    </div>
+                                                    <div>
+                                                        <span style="font-weight: 700; font-size: 1rem; display: block; color: var(--text-color);">Clients</span>
+                                                        <span class="text-muted" style="font-size: 0.8rem;">Active borrower accounts</span>
+                                                    </div>
+                                                </div>
+                                                <div style="text-align: right;">
+                                                    <span style="font-size: 1.25rem; font-weight: 800; color: var(--text-color);"><?php echo number_format($current_total_clients); ?></span>
+                                                    <span class="text-muted" style="font-weight: 500; font-size: 0.9rem;"> / <?php echo $max_clients > 0 ? number_format($max_clients) : '∞'; ?></span>
+                                                </div>
+                                            </div>
+                                            <div style="width: 100%; background: #f1f5f9; border-radius: 8px; height: 12px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
+                                                <div style="height: 100%; width: <?php echo $client_pct; ?>%; background: <?php echo $client_pct >= 90 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #93c5fd, var(--primary-color))'; ?>; border-radius: 8px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; align-items: flex-end;">
+                                                <div style="display: flex; align-items: center; gap: 12px;">
+                                                    <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(34, 197, 94, 0.1); color: #22c55e; display: flex; align-items: center; justify-content: center;">
+                                                        <span class="material-symbols-rounded" style="font-size: 20px;">admin_panel_settings</span>
+                                                    </div>
+                                                    <div>
+                                                        <span style="font-weight: 700; font-size: 1rem; display: block; color: var(--text-color);">Staff Users</span>
+                                                        <span class="text-muted" style="font-size: 0.8rem;">Active employee accounts</span>
+                                                    </div>
+                                                </div>
+                                                <div style="text-align: right;">
+                                                    <span style="font-size: 1.25rem; font-weight: 800; color: var(--text-color);"><?php echo number_format($current_active_staff); ?></span>
+                                                    <span class="text-muted" style="font-weight: 500; font-size: 0.9rem;"> / <?php echo $max_users > 0 ? number_format($max_users) : '∞'; ?></span>
+                                                </div>
+                                            </div>
+                                            <div style="width: 100%; background: #f1f5f9; border-radius: 8px; height: 12px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
+                                                <div style="height: 100%; width: <?php echo $staff_pct; ?>%; background: <?php echo $staff_pct >= 90 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #86efac, #22c55e)'; ?>; border-radius: 8px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div style="margin-top: 32px; padding: 16px; border-radius: 12px; background: <?php echo ($client_pct >= 90 || $staff_pct >= 90) ? '#fef2f2' : '#f8fafc'; ?>; border: 1px solid <?php echo ($client_pct >= 90 || $staff_pct >= 90) ? '#fecaca' : '#e2e8f0'; ?>;">
+                                        <div style="display: flex; gap: 12px; align-items: flex-start;">
+                                            <span class="material-symbols-rounded" style="color: <?php echo ($client_pct >= 90 || $staff_pct >= 90) ? '#ef4444' : '#64748b'; ?>; font-size: 24px; margin-top: 2px;">info</span>
+                                            <p style="margin: 0; font-size: 0.85rem; line-height: 1.5; color: <?php echo ($client_pct >= 90 || $staff_pct >= 90) ? '#b91c1c' : '#475569'; ?>;">
+                                                <?php if ($client_pct >= 90 || $staff_pct >= 90): ?>
+                                                    <strong style="display: block; font-size: 0.95rem; margin-bottom: 4px;">Approaching Limits!</strong> 
+                                                    You are nearing your plan's maximum capacity limit. To continue adding new accounts without interruption, consider upgrading your subscription via the plan manage panel.
+                                                <?php else: ?>
+                                                    Your organization is well within the current active plan limits. You can freely upgrade or downgrade your plan anytime to adjust to market needs.
+                                                <?php endif; ?>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                    </div>
+
+                    <!-- 2. Payment Info Tab -->
+                    <div id="billing-payment" class="tab-content <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'payment') ? 'active' : ''; ?>">
+                        <div class="card" style="padding: 32px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                            <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
+                                <div>
+                                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                        <div style="background: rgba(34, 197, 94, 0.1); color: #22c55e; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                            <span class="material-symbols-rounded" style="font-size: 20px;">credit_card</span>
+                                        </div>
+                                        <h3 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: #1e293b;">Payment Methods</h3>
+                                    </div>
+                                    <p class="text-muted" style="margin: 0; font-size: 0.95rem;">Manage your securely saved credit cards for automated subscription billing.</p>
+                                </div>
+                                <!-- In real app, this would open a modal to add Stripe/card -->
+                                <button type="button" class="btn btn-primary" style="display: flex; align-items: center; gap: 8px; padding: 10px 20px; font-weight: 600; border-radius: 8px; box-shadow: 0 4px 6px rgba(var(--primary-rgb), 0.2);">
+                                    <span class="material-symbols-rounded" style="font-size: 20px;">add_card</span> Add New Card
+                                </button>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="admin-table">
+                                    <thead>
                                         <tr>
+                                            <th>Card</th>
+                                            <th>Cardholder</th>
+                                            <th>Expiry</th>
+                                            <th>Default</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php
+                                        $payment_methods_stmt = $pdo->prepare('SELECT method_id, last_four_digits, cardholder_name, exp_month, exp_year, is_default, created_at FROM tenant_billing_payment_methods WHERE tenant_id = ? ORDER BY is_default DESC, created_at ASC');
+                                        $payment_methods_stmt->execute([$tenant_id]);
+                                        $payment_methods = $payment_methods_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                        if (empty($payment_methods)):
+                                        ?>
+                                        <tr>
+                                            <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                                <span class="material-symbols-rounded" style="font-size: 36px; display: block; margin-bottom: 0.5rem;">credit_card_off</span>
+                                                No payment methods found. Add one to keep your subscription active.
+                                            </td>
+                                        </tr>
+                                        <?php else: ?>
+                                            <?php foreach ($payment_methods as $pm): ?>
+                                            <tr>
                                                 <td>
-                                                    <div class="text-muted" style="font-size: 0.8rem;">•••• <?php echo htmlspecialchars($pm['last_four_digits']); ?></div>
+                                                    <div style="display:flex; align-items:center; gap: 8px;">
+                                                        <span class="material-symbols-rounded text-muted">credit_card</span>
+                                                        <span class="text-muted" style="font-weight: 500;">•••• <?php echo htmlspecialchars($pm['last_four_digits']); ?></span>
+                                                    </div>
                                                 </td>
-                                                <td>
-                                                    <?php echo htmlspecialchars($pm['cardholder_name']); ?>
-                                                </td>
-                                                <td>
-                                                    <?php echo str_pad((string)((int)$pm['exp_month']), 2, '0', STR_PAD_LEFT); ?> / <?php echo (int)$pm['exp_year']; ?>
-                                                </td>
+                                                <td><?php echo htmlspecialchars($pm['cardholder_name']); ?></td>
+                                                <td><?php echo str_pad((string)((int)$pm['exp_month']), 2, '0', STR_PAD_LEFT); ?> / <?php echo (int)$pm['exp_year']; ?></td>
                                                 <td>
                                                     <?php if ((int)$pm['is_default'] === 1): ?>
-                                                        <span class="badge badge-green">Yes</span>
+                                                        <span class="badge badge-green">Default</span>
                                                     <?php else: ?>
-                                                        <span class="text-muted">No</span>
+                                                        <span class="badge badge-gray">Backup</span>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
-                                                    <div style="display:flex; gap:8px; align-items:center;">
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-outline btn-sm"
-                                                            data-method-id="<?php echo (int)$pm['method_id']; ?>"
-                                                            data-cardholder-name="<?php echo htmlspecialchars($pm['cardholder_name'], ENT_QUOTES); ?>"
-                                                            data-exp-month="<?php echo (int)$pm['exp_month']; ?>"
-                                                            data-exp-year="<?php echo (int)$pm['exp_year']; ?>"
-                                                            data-is-default="<?php echo ((int)$pm['is_default'] === 1) ? '1' : '0'; ?>"
-                                                            data-last-four="<?php echo htmlspecialchars($pm['last_four_digits'], ENT_QUOTES); ?>"
-                                                            onclick="openEditPaymentMethodModal(this)">
-                                                            Edit
-                                                        </button>
-                                                        <form method="POST" action="admin.php" data-confirm-title="Remove Payment Method" data-confirm-message="Are you sure you want to remove this payment method? At least one payment method is required." data-confirm-button="Remove">
+                                                    <div style="display:flex; gap:8px;">
+                                                        <form method="POST" action="admin.php" data-confirm-title="Remove Payment Method" data-confirm-message="Are you sure you want to remove this payment method?" data-confirm-button="Remove">
                                                             <input type="hidden" name="action" value="delete_payment_method">
                                                             <input type="hidden" name="method_id" value="<?php echo (int)$pm['method_id']; ?>">
                                                             <button type="submit" class="btn btn-sm" style="color:#ef4444; background: rgba(239,68,68,0.1);">Remove</button>
                                                         </form>
                                                     </div>
                                                 </td>
-                                        </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
+                    </div>
 
-                        <h4 style="margin-bottom: 16px;">Billing History (Monthly Invoices)</h4>
-                        <div class="table-responsive">
-                            <table class="admin-table">
-                                <thead>
-                                    <tr>
-                                        <th>Invoice #</th>
-                                        <th>Billing Month</th>
-                                        <th>Period</th>
-                                        <th>Amount</th>
-                                        <th>Issued</th>
-                                        <th>Due Date</th>
-                                        <th>Paid Date</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php
-                                    $invoices_stmt = $pdo->prepare('SELECT * FROM tenant_billing_invoices WHERE tenant_id = ? ORDER BY billing_period_start DESC, created_at DESC LIMIT 24');
-                                    $invoices_stmt->execute([$tenant_id]);
-                                    $invoices = $invoices_stmt->fetchAll(PDO::FETCH_ASSOC);
-                                    if (empty($invoices)):
-                                    ?>
-                                    <tr>
-                                        <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                                            <span class="material-symbols-rounded" style="font-size: 36px; display: block; margin-bottom: 0.5rem;">receipt_long</span>
-                                            No invoices yet. Your billing history will appear here.
-                                        </td>
-                                    </tr>
-                                    <?php else: ?>
-                                        <?php foreach ($invoices as $inv): ?>
+                    <!-- 3. Payment History Tab -->
+                    <div id="billing-history" class="tab-content <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'history') ? 'active' : ''; ?>">
+                        <div class="card" style="padding: 32px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                            <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
+                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                    <div style="background: rgba(99, 102, 241, 0.1); color: #6366f1; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                        <span class="material-symbols-rounded" style="font-size: 20px;">receipt_long</span>
+                                    </div>
+                                    <h3 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: #1e293b;">Billing History</h3>
+                                </div>
+                                <p class="text-muted" style="margin: 0; font-size: 0.95rem;">View and download past invoices for your platform subscription.</p>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="admin-table">
+                                    <thead>
                                         <tr>
-                                            <td style="font-weight: 500;"><?php echo htmlspecialchars($inv['invoice_number']); ?></td>
-                                            <td class="text-muted"><?php echo htmlspecialchars(date('M Y', strtotime((string)$inv['billing_period_start']))); ?></td>
-                                            <td class="text-muted"><?php echo htmlspecialchars($inv['billing_period_start'] . ' — ' . $inv['billing_period_end']); ?></td>
-                                            <td>₱<?php echo number_format($inv['amount'], 2); ?></td>
-                                            <td class="text-muted"><?php echo htmlspecialchars(date('Y-m-d', strtotime((string)$inv['created_at']))); ?></td>
-                                            <td class="text-muted"><?php echo htmlspecialchars($inv['due_date']); ?></td>
-                                            <td class="text-muted"><?php echo !empty($inv['paid_at']) ? htmlspecialchars(date('Y-m-d', strtotime((string)$inv['paid_at']))) : '—'; ?></td>
-                                            <td>
-                                                <?php
-                                                    $inv_class = 'badge-gray';
-                                                    if ($inv['status'] === 'Paid') $inv_class = 'badge-green';
-                                                    if ($inv['status'] === 'Open') $inv_class = 'badge-blue';
-                                                    if ($inv['status'] === 'Void') $inv_class = 'badge-red';
-                                                ?>
-                                                <span class="badge <?php echo $inv_class; ?>"><?php echo htmlspecialchars($inv['status']); ?></span>
+                                            <th>Invoice #</th>
+                                            <th>Billing Month</th>
+                                            <th>Period</th>
+                                            <th>Amount</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php
+                                        $invoices_stmt = $pdo->prepare('SELECT * FROM tenant_billing_invoices WHERE tenant_id = ? ORDER BY billing_period_start DESC, created_at DESC LIMIT 24');
+                                        $invoices_stmt->execute([$tenant_id]);
+                                        $invoices = $invoices_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                        if (empty($invoices)):
+                                        ?>
+                                        <tr>
+                                            <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                                <span class="material-symbols-rounded" style="font-size: 36px; display: block; margin-bottom: 0.5rem;">receipt_long</span>
+                                                No invoices yet. Your billing history will appear here.
                                             </td>
                                         </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
+                                        <?php else: ?>
+                                            <?php foreach ($invoices as $inv): ?>
+                                            <tr>
+                                                <td style="font-weight: 500;"><?php echo htmlspecialchars($inv['invoice_number']); ?></td>
+                                                <td class="text-muted"><?php echo htmlspecialchars(date('M Y', strtotime((string)$inv['billing_period_start']))); ?></td>
+                                                <td class="text-muted"><?php echo htmlspecialchars($inv['billing_period_start'] . ' — ' . $inv['billing_period_end']); ?></td>
+                                                <td>₱<?php echo number_format($inv['amount'], 2); ?></td>
+                                                <td>
+                                                    <?php
+                                                        $inv_class = 'badge-gray';
+                                                        if ($inv['status'] === 'Paid') $inv_class = 'badge-green';
+                                                        if ($inv['status'] === 'Open') $inv_class = 'badge-blue';
+                                                        if ($inv['status'] === 'Void') $inv_class = 'badge-red';
+                                                    ?>
+                                                    <span class="badge <?php echo $inv_class; ?>"><?php echo htmlspecialchars($inv['status']); ?></span>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </section>

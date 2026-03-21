@@ -48,7 +48,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             
             <div class="nav-cta">
                 <a href="../super_admin/login.php" class="btn btn-login">Platform Login</a>
-                <a href="demo.php" class="btn btn-primary">Contact Us</a>
+                <a href="demo.php" class="btn btn-primary">Apply Now</a>
             </div>
         </div>
     </nav>
@@ -62,8 +62,8 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 <p>MicroFin is a fully isolated, multi-tenant cloud banking platform designed specifically for Microfinance Institutions, SACCOs, and Cooperatives.</p>
                 
                 <div class="hero-actions">
-                    <a href="demo.php" class="btn btn-primary btn-lg">Contact Us</a>
-                    <a href="#features" class="btn btn-outline btn-lg">Explore Features</a>
+                    <a href="demo.php" class="btn btn-primary btn-lg">Apply Now</a>
+                    <a href="demo.php?mode=talk-to-staff" class="btn btn-outline btn-lg">Talk to an Expert</a>
                 </div>
                 <div class="trust-marks">
                     <span>Trusted by <?php echo $powered_by_count; ?> microfinance institutions <?php if($powered_by_count > 0) echo "including:"; ?></span>
@@ -302,10 +302,16 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
         <div class="container" style="text-align: center; max-width: 700px; position: relative; z-index: 1;">
             <h2 style="font-size: 2.8rem; font-weight: 800; line-height: 1.1; margin-bottom: 20px; letter-spacing: -1px;">Ready to modernize your cooperative?</h2>
             <p style="font-size: 1.1rem; margin-bottom: 36px; color: #dbeafe;">Leave legacy desktop software behind. Let our team migrate your data to the cloud seamlessly.</p>
-            <a href="demo.php" class="btn btn-primary btn-lg" style="padding: 16px 36px; font-size: 1.1rem;">
-                <span class="material-symbols-rounded" style="font-size: 20px; margin-right: 8px; vertical-align: middle;">calendar_month</span>
-                Contact Us
-            </a>
+            <div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;">
+                <a href="demo.php" class="btn btn-primary btn-lg" style="padding: 16px 36px; font-size: 1.1rem;">
+                    <span class="material-symbols-rounded" style="font-size: 20px; margin-right: 8px; vertical-align: middle;">calendar_month</span>
+                    Apply Now
+                </a>
+                <a href="demo.php?mode=talk-to-staff" class="btn btn-outline btn-lg" style="padding: 16px 36px; font-size: 1.1rem; border-color: rgba(147,197,253,0.65); color: #dbeafe;">
+                    <span class="material-symbols-rounded" style="font-size: 20px; margin-right: 8px; vertical-align: middle;">support_agent</span>
+                    Talk to Staff
+                </a>
+            </div>
         </div>
     </section>
 

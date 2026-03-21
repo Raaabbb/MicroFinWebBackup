@@ -53,8 +53,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (pageTitle) {
                 pageTitle.textContent = navTitle || item.querySelector('span:nth-child(2)').textContent;
             }
+
+            // Update URL hash without causing a page jump
+            history.replaceState(null, null, `#${targetId}`);
         });
     });
+
+    // Auto-navigate if hash exists or ?section= param exists
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetTab = window.location.hash ? window.location.hash.substring(1) : (urlParams.get('section') || urlParams.get('tab'));       
+    if (targetTab) {
+        const targetNav = document.querySelector(`.nav-item[data-target="${targetTab}"]`);
+        if (targetNav) targetNav.click();
+    }
 
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
@@ -118,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await fetch('../backend/api_theme_preference.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ theme: theme })
+                body: JSON.stringify({ theme: theme, role: 'tenant' })
             });
         } catch (error) {
             // Ignore persistence errors to keep the toggle responsive.

@@ -36,29 +36,23 @@ USE microfin_db;
 -- ✅ EDITED: Proof of legitimacy uploads moved to tenant_legitimacy_documents (TABLE A3)
 -- ✅ EDITED: setup_token removed — just use slug for tenant access
 -- ✅ EDITED: tenant_id is system-generated immutable 10-character alphanumeric identifier (tenant_slug remains editable)
+-- ✅ EDITED: Added request_type to separate Tenant Application vs Talk to an Expert flows
 --
--- STATUS FLOW: Active → Suspended → Soft Deleted → 30 days → Purged
+-- STATUS FLOW:
+--   tenant_application: Pending → Active/Suspended/Rejected
+--   talk_to_expert: New → In Contact → Closed
 -- ============================================================
 CREATE TABLE IF NOT EXISTS tenants (
     tenant_id VARCHAR(50) PRIMARY KEY COMMENT 'System-generated immutable tenant identifier (10-char alphanumeric in app logic)',
     tenant_name VARCHAR(100) NOT NULL,
     tenant_slug VARCHAR(50) UNIQUE COMMENT 'URL-safe identifier e.g. fundline, plaridel, sacredheart',
 
-    -- Contact Person (whoever signed up — could be rep, CEO, branch manager)
-    first_name VARCHAR(50),
-    last_name VARCHAR(50),
-    mi VARCHAR(50),
-    suffix VARCHAR(10),
-    branch_name VARCHAR(100),
-
     -- Demo & Onboarding
     estimated_loans VARCHAR(50) COMMENT 'Used during Demo Request phase',
     onboarding_deadline DATETIME COMMENT '30 days after being Accepted, or else goes to Draft',
 
-    -- Contact & General Info
+    -- Company Info (personal contact details are stored in users)
     company_address TEXT,
-    contact_number VARCHAR(30),
-    email VARCHAR(100),
 
     -- Plan & Limits
     plan_tier VARCHAR(250) DEFAULT 'Starter',
@@ -73,9 +67,15 @@ CREATE TABLE IF NOT EXISTS tenants (
     setup_current_step INT DEFAULT 0 COMMENT 'Onboarding step: 0=password, 1=loan products, 2=credit config, 3=website, 4=branding, 5=billing, 6=done',
 
     -- Status
-    status ENUM('Active', 'Draft', 'CONSIDER', 'Suspended', 'Archived', 'Deleted',
-                'Compromised', 'Pending', 'Contacted', 'Accepted', 'Rejected')
+    status ENUM('Pending', 'Active', 'Suspended', 'Rejected', 'New', 'In Contact', 'Closed')
            DEFAULT 'Pending',
+
+    -- Intake Flow Tracking
+    request_type ENUM('tenant_application', 'talk_to_expert')
+        NOT NULL DEFAULT 'tenant_application'
+        COMMENT 'Entry flow from public website: full application vs expert consultation',
+    assigned_expert_user_id INT NULL
+        COMMENT 'Optional owner of talk_to_expert follow-up (maps to users.user_id in app logic)',
 
     -- ✅ EDITED: Soft delete columns
     deleted_at TIMESTAMP NULL COMMENT 'Soft delete timestamp, NULL = active',
@@ -88,9 +88,11 @@ CREATE TABLE IF NOT EXISTS tenants (
 
     -- Indexes
     INDEX idx_status (status),
-    INDEX idx_created_at (created_at)
+    INDEX idx_created_at (created_at),
+    INDEX idx_request_type_status (request_type, status),
+    INDEX idx_request_type_created_at (request_type, created_at),
+    INDEX idx_assigned_expert_user (assigned_expert_user_id)
 );
-
 
 -- ============================================================
 -- TABLE A2: tenant_branding (Tenant Visual Identity)
@@ -404,10 +406,14 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 --
 -- TENANT-SCOPED REGISTRATION FLOW:
 --   Each tenant has their own website + app download link (tenant_id baked in).
---   1. Client downloads tenant app → tenant_id is known from the start
---   2. Client registers → INSERT users (tenant_id=X, user_type='Client', status='Inactive')
---   3. Staff reviews & approves → UPDATE users SET status='Active' → INSERT clients (...)
---   4. No "floating" users — every non-super-admin always has a tenant_id
+--   Public website intake (demo.php):
+--   1. Talk to an Expert → INSERT users (tenant_id=X, user_type='inquirer', status='Inactive')
+--   2. Tenant Application → INSERT users (tenant_id=X, user_type='applicant', status='Inactive')
+--   3. Provisioning by Super Admin → UPDATE users SET user_type='Admin', status='Active'
+--   Mobile/client onboarding flow (tenant app):
+--   4. Client registers → INSERT users (tenant_id=X, user_type='Client', status='Inactive')
+--   5. Staff reviews & approves → UPDATE users SET status='Active' → INSERT clients (...)
+--   6. No "floating" users — every non-super-admin always has a tenant_id
 --
 -- EMPLOYEE CREATION FLOW:
 --   1. Tenant admin creates staff account → INSERT users (tenant_id=X, user_type='Employee')
@@ -435,8 +441,8 @@ CREATE TABLE IF NOT EXISTS users (
     -- RBAC
     force_password_change BOOLEAN DEFAULT FALSE,
     role_id INT NOT NULL,
-    user_type ENUM('Employee', 'Client', 'Super Admin') NOT NULL
-             COMMENT '✅ EDITED: App User removed — tenant-scoped flow, no floating users',
+    user_type ENUM('Employee', 'Client', 'Admin', 'applicant', 'inquirer', 'Super Admin') NOT NULL
+             COMMENT '✅ EDITED: Includes intake/provisioning flow states (applicant/inquirer -> Admin)',
     status ENUM('Active', 'Inactive', 'Suspended', 'Locked') DEFAULT 'Active',
 
     -- Security
@@ -1210,7 +1216,6 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 --   Tables: system_settings, tenant_feature_toggles, tenant_website_content
 -- ************************************************************
 -- ************************************************************
-
 
 -- ============================================================
 -- TABLE M1: system_settings (Per-tenant Configuration)
